@@ -34,6 +34,8 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module.js';
         autoLoadEntities: true,
         synchronize: configService.get<boolean>('database.synchronize'),
         logging: configService.get<boolean>('database.logging'),
+        retryAttempts: 3,
+        retryDelay: 3000,
       }),
     }),
     UsersModule,
