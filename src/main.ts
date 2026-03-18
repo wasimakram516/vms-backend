@@ -1,11 +1,16 @@
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
+import { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module.js';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
+import { ResponseInterceptor } from './common/interceptors/response.interceptor.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: ['error', 'warn'],
+  });
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('app.port', 3000);
@@ -23,6 +28,15 @@ async function bootstrap() {
 
   app.use(helmet());
 
+  // Request logging - log when endpoints are hit
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const start = Date.now();
+    res.on('finish', () => {
+      console.log(`${req.method} ${req.originalUrl} ${res.statusCode} - ${Date.now() - start}ms`);
+    });
+    next();
+  });
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -34,11 +48,12 @@ async function bootstrap() {
     }),
   );
 
+  app.useGlobalInterceptors(new ResponseInterceptor());
+  app.useGlobalFilters(new AllExceptionsFilter(nodeEnv));
+
   await app.listen(port);
 
-  const logger = new Logger('Bootstrap');
-  logger.log(`Environment: ${nodeEnv}`);
-  logger.log(`Server running on http://localhost:${port}/${apiPrefix}`);
+  console.log(`Server running on http://localhost:${port}/${apiPrefix}`);
 }
 
 bootstrap();

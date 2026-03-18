@@ -1,0 +1,65 @@
+import { Body, Controller, Delete, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { ForbiddenException } from '@nestjs/common';
+import { UsersService } from './users.service.js';
+import { Role } from '../common/enums/role.enum.js';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
+import { Roles } from '../auth/decorators/roles.decorator.js';
+import { RolesGuard } from '../auth/guards/roles.guard.js';
+import { CreateUserDto } from './dto/create-user.dto.js';
+import { UpdateUserDto } from './dto/update-user.dto.js';
+import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
+
+@Controller('users')
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  // super admin creates an admin user
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SuperAdmin)
+  @Post('admin')
+  async createAdmin(@Body() body: CreateUserDto) {
+    const user = await this.usersService.createUser({
+      fullName: body.fullName,
+      email: body.email,
+      password: body.password,
+      role: Role.Admin,
+    });
+
+    return { id: user.id, fullName: user.fullName, email: user.email, role: user.role };
+  }
+
+  // super admin or admin creates a staff user
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SuperAdmin, Role.Admin)
+  @Post('staff')
+  async createStaff(@Body() body: CreateUserDto) {
+    const user = await this.usersService.createUser({
+      fullName: body.fullName,
+      email: body.email,
+      password: body.password,
+      role: Role.Staff,
+    });
+
+    return { id: user.id, fullName: user.fullName, email: user.email, role: user.role };
+  }
+
+  // super admin or admin updates user fields (role updates restricted to super admin)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SuperAdmin, Role.Admin)
+  @Patch(':id')
+  async update(@Param('id') id: string, @Body() body: UpdateUserDto, @CurrentUser() actor: any) {
+    if (body.role && actor?.role !== Role.SuperAdmin) {
+      throw new ForbiddenException('Only super admin can change user role');
+    }
+    return this.usersService.updateUser(id, body, actor);
+  }
+
+  // only super admin can delete users
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SuperAdmin)
+  @Delete(':id')
+  async remove(@Param('id') id: string) {
+    return this.usersService.deleteUser(id);
+  }
+}
+
