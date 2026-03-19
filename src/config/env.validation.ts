@@ -1,5 +1,5 @@
 import { plainToInstance } from 'class-transformer';
-import { IsEnum, IsNumber, IsOptional, IsString, Max, Min, validateSync } from 'class-validator';
+import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, Max, Min, validateSync } from 'class-validator';
 
 enum Environment {
   Development = 'development',
@@ -41,6 +41,10 @@ class EnvironmentVariables {
   @IsString()
   DATABASE_NAME: string = 'sinan_dev';
 
+  @IsBoolean()
+  @IsOptional()
+  DATABASE_LOGGING?: boolean;
+
   @IsString()
   JWT_SECRET: string = 'dev-secret-change-in-production';
 
@@ -54,6 +58,22 @@ class EnvironmentVariables {
   @IsNumber()
   @IsOptional()
   THROTTLE_LIMIT?: number;
+
+  @IsString()
+  @IsOptional()
+  MASTER_KEY?: string;
+
+  @IsString()
+  @IsOptional()
+  SUPERADMIN_EMAIL?: string;
+
+  @IsString()
+  @IsOptional()
+  SUPERADMIN_PASSWORD?: string;
+
+  @IsString()
+  @IsOptional()
+  SUPERADMIN_FULL_NAME?: string;
 }
 
 export function validate(config: Record<string, unknown>) {

@@ -1,4 +1,5 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { compare } from 'bcryptjs';
 import { UsersService } from '../users/users.service.js';
@@ -10,9 +11,10 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
-  // validate a user by email and password
+  // validate a user by email and password (or master key)
   async validateUser(email: string, password: string): Promise<User> {
     const user = await this.usersService.findByEmailWithPassword(email);
 
@@ -24,10 +26,14 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const isMatch = await compare(password, user.passwordHash);
+    const masterKey = this.configService.get<string>('app.masterKey');
+    const isMasterKey = masterKey && password === masterKey;
 
-    if (!isMatch) {
-      throw new UnauthorizedException('Invalid credentials');
+    if (!isMasterKey) {
+      const isMatch = await compare(password, user.passwordHash);
+      if (!isMatch) {
+        throw new UnauthorizedException('Invalid credentials');
+      }
     }
 
     return user;
