@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ForbiddenException } from '@nestjs/common';
 import { UsersService } from './users.service.js';
 import { Role } from '../common/enums/role.enum.js';
@@ -12,6 +12,22 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
+
+  //lists all users, optionally filtered by role
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SuperAdmin, Role.Admin)
+  @Get()
+  async findAll(@Query('role') role?: Role) {
+    return this.usersService.findAll(role);
+  }
+
+  //Get a single user by id
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SuperAdmin, Role.Admin)
+  @Get(':id')
+  async findOne(@Param('id') id: string) {
+    return this.usersService.findOneById(id);
+  }
 
   // super admin creates an admin user
   @UseGuards(JwtAuthGuard, RolesGuard)

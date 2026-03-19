@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import type { StringValue } from 'ms';
 import { compare } from 'bcryptjs';
 import { UsersService } from '../users/users.service.js';
 import { User } from '../users/entities/user.entity.js';
@@ -39,18 +40,54 @@ export class AuthService {
     return user;
   }
 
-  // issue a jwt token for a user
-  async login(user: User): Promise<{ accessToken: string }> {
-    const payload = {
-      sub: user.id,
-      role: user.role,
-      email: user.email,
-    };
+  // issue access and refresh tokens for a user
+  async login(user: User): Promise<{ accessToken: string; refreshToken: string }> {
+    const payload = { sub: user.id, role: user.role, email: user.email };
 
-    const accessToken = await this.jwtService.signAsync(payload);
+    const refreshSecret = this.configService.get<string>(
+      'jwt.refreshSecret',
+      'dev-refresh-secret-change-in-production',
+    );
+    const refreshExpiresIn = this.configService.get<string>('jwt.refreshExpiresIn', '7d');
+
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwtService.signAsync(payload),
+      this.jwtService.signAsync(payload, { secret: refreshSecret, expiresIn: refreshExpiresIn as StringValue }),
+    ]);
+
     await this.usersService.updateLastLogin(user.id);
 
-    return { accessToken };
+    return { accessToken, refreshToken };
+  }
+
+  // rotate tokens 
+  async refresh(token: string): Promise<{ accessToken: string; refreshToken: string }> {
+    const refreshSecret = this.configService.get<string>(
+      'jwt.refreshSecret',
+      'dev-refresh-secret-change-in-production',
+    );
+
+    let payload: { sub: string; role: string; email: string };
+    try {
+      payload = await this.jwtService.verifyAsync(token, { secret: refreshSecret });
+    } catch {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    const user = await this.usersService.findById(payload.sub);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const newPayload = { sub: user.id, role: user.role, email: user.email };
+    const refreshExpiresIn = this.configService.get<string>('jwt.refreshExpiresIn', '7d');
+
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwtService.signAsync(newPayload),
+      this.jwtService.signAsync(newPayload, { secret: refreshSecret, expiresIn: refreshExpiresIn as StringValue }),
+    ]);
+
+    return { accessToken, refreshToken };
   }
 }
 

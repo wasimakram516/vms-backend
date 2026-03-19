@@ -65,6 +65,13 @@ export class UsersService {
     }
   }
 
+  async findAll(role?: Role): Promise<User[]> {
+    return this.usersRepository.find({
+      where: role ? { role } : {},
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   // find a user by email including password hash
   async findByEmailWithPassword(email: string): Promise<User | null> {
     return this.usersRepository.findOne({
@@ -75,6 +82,14 @@ export class UsersService {
 
   async findById(id: string): Promise<User | null> {
     return this.usersRepository.findOne({ where: { id } });
+  }
+
+  async findOneById(id: string): Promise<User> {
+    const user = await this.usersRepository.findOne({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    return user;
   }
 
   async findByEmail(email: string): Promise<User | null> {
