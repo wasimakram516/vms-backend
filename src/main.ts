@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor.js';
@@ -26,6 +27,7 @@ async function bootstrap() {
     credentials: true,
   });
 
+  app.use(cookieParser());
   app.use(helmet());
 
   // Request logging - log when endpoints are hit
