@@ -1,0 +1,112 @@
+name: Deploy Sinan VMS Backend
+
+on:
+  push:
+    branches:
+      - main
+      - uat
+
+jobs:
+  deploy-prod:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, backend, production]
+    environment: Production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare production directory
+        run: |
+          sudo mkdir -p /var/www/sinan-vms-prod/backend
+          sudo chown -R ubuntu:ubuntu /var/www/sinan-vms-prod
+          cd /var/www/sinan-vms-prod/backend
+          rm -rf node_modules dist || true
+          cp -r $GITHUB_WORKSPACE/* .
+
+      - name: Create production .env
+        run: |
+          cd /var/www/sinan-vms-prod/backend
+          sudo rm -f .env
+          sudo touch .env
+          sudo tee .env > /dev/null <<EOF
+          NODE_ENV=production
+          PORT=4000
+          API_PREFIX=api/v1
+          DATABASE_HOST=localhost
+          DATABASE_PORT=5432
+          DATABASE_LOGGING=false
+          JWT_EXPIRES_IN=7d
+          THROTTLE_TTL=60000
+          THROTTLE_LIMIT=100
+          CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
+          DATABASE_NAME=${{ secrets.DATABASE_NAME }}
+          DATABASE_USER=${{ secrets.DATABASE_USER }}
+          DATABASE_PASSWORD=${{ secrets.DATABASE_PASSWORD }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          MASTER_KEY=${{ secrets.MASTER_KEY }}
+          SUPERADMIN_EMAIL=${{ secrets.SUPERADMIN_EMAIL }}
+          SUPERADMIN_PASSWORD=${{ secrets.SUPERADMIN_PASSWORD }}
+          SUPERADMIN_FULL_NAME=${{ secrets.SUPERADMIN_FULL_NAME }}
+          EOF
+
+      - name: Install dependencies, build & restart PM2 (prod)
+        run: |
+          cd /var/www/sinan-vms-prod/backend
+          npm ci
+          npm run build
+          npm prune --omit=dev
+          pm2 restart sinan-vms-backend --update-env || pm2 start dist/main.js --name "sinan-vms-backend"
+          pm2 save
+
+  deploy-uat:
+    if: github.ref == 'refs/heads/uat'
+    runs-on: [self-hosted, backend, uat]
+    environment: UAT
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare UAT directory
+        run: |
+          sudo mkdir -p /var/www/sinan-vms-uat/backend
+          sudo chown -R ubuntu:ubuntu /var/www/sinan-vms-uat
+          cd /var/www/sinan-vms-uat/backend
+          rm -rf node_modules dist || true
+          cp -r $GITHUB_WORKSPACE/* .
+
+      - name: Create UAT .env
+        run: |
+          cd /var/www/sinan-vms-uat/backend
+          sudo rm -f .env
+          sudo touch .env
+          sudo tee .env > /dev/null <<EOF
+          NODE_ENV=uat
+          PORT=4000
+          API_PREFIX=api/v1
+          DATABASE_HOST=localhost
+          DATABASE_PORT=5432
+          DATABASE_LOGGING=false
+          JWT_EXPIRES_IN=7d
+          THROTTLE_TTL=60000
+          THROTTLE_LIMIT=100
+          CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
+          DATABASE_NAME=${{ secrets.DATABASE_NAME }}
+          DATABASE_USER=${{ secrets.DATABASE_USER }}
+          DATABASE_PASSWORD=${{ secrets.DATABASE_PASSWORD }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          MASTER_KEY=${{ secrets.MASTER_KEY }}
+          SUPERADMIN_EMAIL=${{ secrets.SUPERADMIN_EMAIL }}
+          SUPERADMIN_PASSWORD=${{ secrets.SUPERADMIN_PASSWORD }}
+          SUPERADMIN_FULL_NAME=${{ secrets.SUPERADMIN_FULL_NAME }}
+          EOF
+
+      - name: Install dependencies, build & restart PM2 (uat)
+        run: |
+          cd /var/www/sinan-vms-uat/backend
+          npm ci
+          npm run build
+          npm prune --omit=dev
+          pm2 restart sinan-vms-backend-uat --update-env || pm2 start dist/main.js --name "sinan-vms-backend-uat"
+          pm2 save

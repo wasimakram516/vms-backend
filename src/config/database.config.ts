@@ -6,6 +6,6 @@ export const databaseConfig = registerAs('database', () => ({
   username: process.env.DATABASE_USER || 'postgres',
   password: process.env.DATABASE_PASSWORD || 'postgres',
   name: process.env.DATABASE_NAME || 'sinan_dev',
-  synchronize: process.env.NODE_ENV !== 'production',
+  synchronize: false,
   logging: process.env.DATABASE_LOGGING === 'true',
 }));

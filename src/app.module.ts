@@ -1,3 +1,4 @@
+import { join } from 'path';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -34,6 +35,8 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module.js';
         autoLoadEntities: true,
         synchronize: configService.get<boolean>('database.synchronize'),
         logging: configService.get<boolean>('database.logging'),
+        migrations: [join(__dirname, 'database', 'migrations', '*.js')],
+        migrationsRun: true,
         retryAttempts: 3,
         retryDelay: 3000,
       }),

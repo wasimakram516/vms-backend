@@ -17,7 +17,11 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "db:create": "ts-node --project tsconfig.migrations.json -r tsconfig-paths/register src/database/create-database.ts",
+    "migration:generate": "npm run db:create && ts-node --project tsconfig.migrations.json -r ./src/database/require-hook.js -r tsconfig-paths/register node_modules/typeorm/cli.js migration:generate -d src/database/data-source.ts",
+    "migration:run": "npm run db:create && ts-node --project tsconfig.migrations.json -r ./src/database/require-hook.js -r tsconfig-paths/register node_modules/typeorm/cli.js migration:run -d src/database/data-source.ts",
+    "migration:revert": "ts-node --project tsconfig.migrations.json -r ./src/database/require-hook.js -r tsconfig-paths/register node_modules/typeorm/cli.js migration:revert -d src/database/data-source.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -53,6 +57,7 @@
     "@types/node": "^22.10.7",
     "@types/passport-jwt": "^4.0.1",
     "@types/passport-local": "^1.0.38",
+    "@types/pg": "^8.20.0",
     "@types/supertest": "^6.0.2",
     "cross-env": "^10.1.0",
     "eslint": "^9.18.0",
