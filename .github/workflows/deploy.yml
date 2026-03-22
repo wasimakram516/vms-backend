@@ -62,29 +62,26 @@ jobs:
 
       - name: Create production .env
         run: |
-          cd /var/www/sinan/backend
-          sudo rm -f .env
-          sudo touch .env
-          sudo tee .env > /dev/null <<EOF
-          NODE_ENV=production
-          PORT=4000
-          API_PREFIX=api/v1
-          DATABASE_HOST=localhost
-          DATABASE_PORT=5432
-          DATABASE_LOGGING=false
-          JWT_EXPIRES_IN=7d
-          THROTTLE_TTL=60000
-          THROTTLE_LIMIT=100
-          CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
-          DATABASE_NAME=${{ secrets.DATABASE_NAME }}
-          DATABASE_USER=${{ secrets.DATABASE_USER }}
-          DATABASE_PASSWORD=${{ secrets.DATABASE_PASSWORD }}
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
-          MASTER_KEY=${{ secrets.MASTER_KEY }}
-          SUPERADMIN_EMAIL=${{ secrets.SUPERADMIN_EMAIL }}
-          SUPERADMIN_PASSWORD=${{ secrets.SUPERADMIN_PASSWORD }}
-          SUPERADMIN_FULL_NAME=${{ secrets.SUPERADMIN_FULL_NAME }}
-          EOF
+          {
+            echo "NODE_ENV=production"
+            echo "PORT=4000"
+            echo "API_PREFIX=api/v1"
+            echo "DATABASE_HOST=localhost"
+            echo "DATABASE_PORT=5432"
+            echo "DATABASE_LOGGING=false"
+            echo "JWT_EXPIRES_IN=7d"
+            echo "THROTTLE_TTL=60000"
+            echo "THROTTLE_LIMIT=100"
+            echo "CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}"
+            echo "DATABASE_NAME=${{ secrets.DATABASE_NAME }}"
+            echo "DATABASE_USER=${{ secrets.DATABASE_USER }}"
+            echo "DATABASE_PASSWORD=${{ secrets.DATABASE_PASSWORD }}"
+            echo "JWT_SECRET=${{ secrets.JWT_SECRET }}"
+            echo "MASTER_KEY=${{ secrets.MASTER_KEY }}"
+            echo "SUPERADMIN_EMAIL=${{ secrets.SUPERADMIN_EMAIL }}"
+            echo "SUPERADMIN_PASSWORD=${{ secrets.SUPERADMIN_PASSWORD }}"
+            echo "SUPERADMIN_FULL_NAME=${{ secrets.SUPERADMIN_FULL_NAME }}"
+          } | sudo tee /var/www/sinan/backend/.env > /dev/null
 
       - name: Install production dependencies & restart PM2
         run: |
@@ -119,29 +116,26 @@ jobs:
 
       - name: Create UAT .env
         run: |
-          cd /var/www/sinan/backend
-          sudo rm -f .env
-          sudo touch .env
-          sudo tee .env > /dev/null <<EOF
-          NODE_ENV=production
-          PORT=4000
-          API_PREFIX=api/v1
-          DATABASE_HOST=localhost
-          DATABASE_PORT=5432
-          DATABASE_LOGGING=false
-          JWT_EXPIRES_IN=7d
-          THROTTLE_TTL=60000
-          THROTTLE_LIMIT=100
-          CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
-          DATABASE_NAME=${{ secrets.DATABASE_NAME }}
-          DATABASE_USER=${{ secrets.DATABASE_USER }}
-          DATABASE_PASSWORD=${{ secrets.DATABASE_PASSWORD }}
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
-          MASTER_KEY=${{ secrets.MASTER_KEY }}
-          SUPERADMIN_EMAIL=${{ secrets.SUPERADMIN_EMAIL }}
-          SUPERADMIN_PASSWORD=${{ secrets.SUPERADMIN_PASSWORD }}
-          SUPERADMIN_FULL_NAME=${{ secrets.SUPERADMIN_FULL_NAME }}
-          EOF
+          {
+            echo "NODE_ENV=production"
+            echo "PORT=4000"
+            echo "API_PREFIX=api/v1"
+            echo "DATABASE_HOST=localhost"
+            echo "DATABASE_PORT=5432"
+            echo "DATABASE_LOGGING=false"
+            echo "JWT_EXPIRES_IN=7d"
+            echo "THROTTLE_TTL=60000"
+            echo "THROTTLE_LIMIT=100"
+            echo "CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}"
+            echo "DATABASE_NAME=${{ secrets.DATABASE_NAME }}"
+            echo "DATABASE_USER=${{ secrets.DATABASE_USER }}"
+            echo "DATABASE_PASSWORD=${{ secrets.DATABASE_PASSWORD }}"
+            echo "JWT_SECRET=${{ secrets.JWT_SECRET }}"
+            echo "MASTER_KEY=${{ secrets.MASTER_KEY }}"
+            echo "SUPERADMIN_EMAIL=${{ secrets.SUPERADMIN_EMAIL }}"
+            echo "SUPERADMIN_PASSWORD=${{ secrets.SUPERADMIN_PASSWORD }}"
+            echo "SUPERADMIN_FULL_NAME=${{ secrets.SUPERADMIN_FULL_NAME }}"
+          } | sudo tee /var/www/sinan/backend/.env > /dev/null
 
       - name: Install production dependencies & restart PM2
         run: |
