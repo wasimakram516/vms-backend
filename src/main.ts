@@ -19,7 +19,7 @@ async function bootstrap() {
   const corsOrigins = configService.get<string[]>('app.corsOrigins', ['*']);
   const nodeEnv = configService.get<string>('app.nodeEnv', 'development');
 
-  app.setGlobalPrefix(apiPrefix);
+  app.setGlobalPrefix(apiPrefix, { exclude: ['/'] });
 
   app.enableCors({
     origin: corsOrigins,
