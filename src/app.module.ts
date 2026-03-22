@@ -1,5 +1,6 @@
 import { join } from 'path';
 import { Module } from '@nestjs/common';
+import { AppController } from './app.controller.js';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { appConfig, databaseConfig, jwtConfig, validate } from './config/index.js';
@@ -15,6 +16,7 @@ import { RegistrationActivityLogsModule } from './registration-activity-logs/reg
 import { AuditLogsModule } from './audit-logs/audit-logs.module.js';
 
 @Module({
+  controllers: [AppController],
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
