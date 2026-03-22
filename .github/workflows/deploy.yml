@@ -7,26 +7,62 @@ on:
       - uat
 
 jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: |
+            dist/
+            package.json
+            package-lock.json
+
   deploy-prod:
+    name: Deploy to Production
+    needs: build
     if: github.ref == 'refs/heads/main'
     runs-on: [self-hosted, backend, production]
     environment: Production
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: .
 
       - name: Prepare production directory
         run: |
-          sudo mkdir -p /var/www/sinan-vms-prod/backend
-          sudo chown -R ubuntu:ubuntu /var/www/sinan-vms-prod
-          cd /var/www/sinan-vms-prod/backend
+          sudo mkdir -p /var/www/sinan/backend
+          sudo chown -R ubuntu:ubuntu /var/www/sinan
+          cd /var/www/sinan/backend
           rm -rf node_modules dist || true
-          cp -r $GITHUB_WORKSPACE/* .
+          cp -r $GITHUB_WORKSPACE/dist ./dist
+          cp $GITHUB_WORKSPACE/package.json .
+          cp $GITHUB_WORKSPACE/package-lock.json .
 
       - name: Create production .env
         run: |
-          cd /var/www/sinan-vms-prod/backend
+          cd /var/www/sinan/backend
           sudo rm -f .env
           sudo touch .env
           sudo tee .env > /dev/null <<EOF
@@ -50,35 +86,40 @@ jobs:
           SUPERADMIN_FULL_NAME=${{ secrets.SUPERADMIN_FULL_NAME }}
           EOF
 
-      - name: Install dependencies, build & restart PM2 (prod)
+      - name: Install production dependencies & restart PM2
         run: |
-          cd /var/www/sinan-vms-prod/backend
-          npm ci
-          npm run build
-          npm prune --omit=dev
+          cd /var/www/sinan/backend
+          npm ci --omit=dev
           pm2 restart sinan-vms-backend --update-env || pm2 start dist/main.js --name "sinan-vms-backend"
           pm2 save
 
   deploy-uat:
+    name: Deploy to UAT
+    needs: build
     if: github.ref == 'refs/heads/uat'
     runs-on: [self-hosted, backend, uat]
     environment: UAT
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: .
 
       - name: Prepare UAT directory
         run: |
-          sudo mkdir -p /var/www/sinan-vms-uat/backend
-          sudo chown -R ubuntu:ubuntu /var/www/sinan-vms-uat
-          cd /var/www/sinan-vms-uat/backend
+          sudo mkdir -p /var/www/sinan/backend
+          sudo chown -R ubuntu:ubuntu /var/www/sinan
+          cd /var/www/sinan/backend
           rm -rf node_modules dist || true
-          cp -r $GITHUB_WORKSPACE/* .
+          cp -r $GITHUB_WORKSPACE/dist ./dist
+          cp $GITHUB_WORKSPACE/package.json .
+          cp $GITHUB_WORKSPACE/package-lock.json .
 
       - name: Create UAT .env
         run: |
-          cd /var/www/sinan-vms-uat/backend
+          cd /var/www/sinan/backend
           sudo rm -f .env
           sudo touch .env
           sudo tee .env > /dev/null <<EOF
@@ -102,11 +143,9 @@ jobs:
           SUPERADMIN_FULL_NAME=${{ secrets.SUPERADMIN_FULL_NAME }}
           EOF
 
-      - name: Install dependencies, build & restart PM2 (uat)
+      - name: Install production dependencies & restart PM2
         run: |
-          cd /var/www/sinan-vms-uat/backend
-          npm ci
-          npm run build
-          npm prune --omit=dev
+          cd /var/www/sinan/backend
+          npm ci --omit=dev
           pm2 restart sinan-vms-backend-uat --update-env || pm2 start dist/main.js --name "sinan-vms-backend-uat"
           pm2 save
