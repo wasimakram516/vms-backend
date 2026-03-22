@@ -82,7 +82,7 @@ jobs:
           sudo rm -f .env
           sudo touch .env
           sudo tee .env > /dev/null <<EOF
-          NODE_ENV=uat
+          NODE_ENV=production
           PORT=4000
           API_PREFIX=api/v1
           DATABASE_HOST=localhost
