@@ -5,6 +5,9 @@ import { AuthService } from './auth.service.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { CurrentUser } from './decorators/current-user.decorator.js';
 import { LoginDto } from './dto/login.dto.js';
+import { SendOtpDto } from './dto/send-otp.dto.js';
+import { VerifyOtpDto } from './dto/verify-otp.dto.js';
+import { OtpVerificationsService } from '../otp-verifications/otp-verifications.service.js';
 
 const REFRESH_COOKIE = 'refreshToken';
 
@@ -13,6 +16,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly otpService: OtpVerificationsService,
   ) {}
 
   // user login
@@ -70,5 +74,18 @@ export class AuthController {
   @Get('me')
   async me(@CurrentUser() user: any) {
     return user;
+  }
+
+  // send OTP to visitor email or phone
+  @Post('otp/send')
+  async sendOtp(@Body() body: SendOtpDto) {
+    await this.otpService.sendOtp(body.target);
+    return { message: 'OTP sent' };
+  }
+
+  // verify OTP and return visitor identity
+  @Post('otp/verify')
+  async verifyOtp(@Body() body: VerifyOtpDto) {
+    return this.otpService.verifyOtp(body.target, body.code);
   }
 }

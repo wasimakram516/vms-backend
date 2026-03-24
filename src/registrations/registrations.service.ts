@@ -16,21 +16,35 @@ import { CreateRegistrationDto } from './dto/create-registration.dto.js';
 import { UpdateRegistrationDto } from './dto/update-registration.dto.js';
 import { ApproveRegistrationDto } from './dto/approve-registration.dto.js';
 import { RejectRegistrationDto } from './dto/reject-registration.dto.js';
+import { RegistrationsSocket } from '../socket/registrations.socket.js';
 
-const USER_FIELD_KEYS = {
-  email: ['email', 'visitor_email', 'user_email'],
-  fullName: ['full_name', 'fullName', 'name', 'visitor_name', 'visitor_full_name'],
-  phone: ['phone', 'visitor_phone', 'user_phone'],
-};
+function normalize(str = ''): string {
+  return String(str).toLowerCase().replace(/[^a-z0-9]/g, '');
+}
 
-function extract(fv: Record<string, unknown>, keys: string[]): string | undefined {
-  for (const key of keys) {
-    const v = fv?.[key];
-    if (v != null && typeof v === 'string') return v.trim() || undefined;
-    if (v != null && typeof v === 'number') return String(v);
+function pick(
+  fields: Record<string, unknown>,
+  matchKey: string,
+  extraKeys: string[] = [],
+): string | undefined {
+  const candidates = new Set([matchKey, ...extraKeys].map(normalize));
+  for (const [key, val] of Object.entries(fields)) {
+    if (candidates.has(normalize(key))) {
+      if (val == null) return undefined;
+      if (typeof val === 'string') return val.trim() || undefined;
+      if (typeof val === 'number') return String(val);
+    }
   }
   return undefined;
 }
+
+const EMAIL_ALIASES = ['email', 'e-mail', 'email address', 'visitor email', 'user email'];
+const PHONE_ALIASES = ['phone', 'phone number', 'mobile', 'contact', 'whatsapp', 'visitor phone', 'user phone'];
+const NAME_ALIASES  = ['fullname', 'full name', 'name', 'visitor name', 'visitor full name'];
+
+const pickEmail = (f: Record<string, unknown>) => pick(f, 'email', EMAIL_ALIASES);
+const pickPhone = (f: Record<string, unknown>) => pick(f, 'phone', PHONE_ALIASES);
+const pickName  = (f: Record<string, unknown>) => pick(f, 'fullname', NAME_ALIASES);
 
 @Injectable()
 export class RegistrationsService {
@@ -41,10 +55,32 @@ export class RegistrationsService {
     private readonly fieldValueRepo: Repository<RegistrationFieldValue>,
     private readonly customFieldsService: CustomFieldsService,
     private readonly usersService: UsersService,
+    private readonly registrationsSocket: RegistrationsSocket,
   ) {}
 
   async getFormFields() {
     return this.customFieldsService.findActiveForForm();
+  }
+
+  private async registrationExistsByFieldValue(
+    fieldAliases: string[],
+    value: string,
+  ): Promise<boolean> {
+    const normalizedKeys = fieldAliases.map(normalize);
+    const count = await this.fieldValueRepo
+      .createQueryBuilder('fv')
+      .innerJoin('fv.customField', 'cf')
+      .innerJoin('fv.registration', 'reg')
+      .where(
+        `REGEXP_REPLACE(LOWER(cf."fieldKey"), '[^a-z0-9]', '', 'g') IN (:...keys)`,
+        { keys: normalizedKeys },
+      )
+      .andWhere('LOWER(fv.value::text) = LOWER(:value)', { value: JSON.stringify(value) })
+      .andWhere('reg.status NOT IN (:...statuses)', {
+        statuses: [RegistrationStatus.Cancelled, RegistrationStatus.Rejected],
+      })
+      .getCount();
+    return count > 0;
   }
 
   async create(dto: CreateRegistrationDto) {
@@ -52,28 +88,68 @@ export class RegistrationsService {
 
     if (!userId) {
       const fv = dto.fieldValues ?? {};
-      const email = extract(fv, USER_FIELD_KEYS.email);
-      const fullName = extract(fv, USER_FIELD_KEYS.fullName);
-      const phone = extract(fv, USER_FIELD_KEYS.phone);
+      const email = pickEmail(fv);
+      const fullName = pickName(fv);
+      const phone = pickPhone(fv);
 
-      if (!email) {
-        throw new BadRequestException('Email is required in fieldValues when userId is not provided');
+      if (!email && !phone) {
+        throw new BadRequestException('Email or phone is required in fieldValues when userId is not provided');
       }
       if (!fullName) {
         throw new BadRequestException('Full name is required in fieldValues when userId is not provided');
       }
 
-      let user = await this.usersService.findByEmail(email);
-      if (!user) {
-        user = await this.usersService.createVisitor({
-          fullName,
-          email,
-          phone,
-        });
-      } else if (user.role !== Role.Visitor) {
-        throw new ConflictException('Email is already registered with a different account type');
+      const userByEmail = email ? await this.usersService.findByEmail(email) : null;
+      const userByPhone = phone ? await this.usersService.findByPhone(phone) : null;
+
+      if (userByEmail && userByPhone && userByEmail.id !== userByPhone.id) {
+        throw new ConflictException('Email and phone belong to different existing accounts');
       }
-      userId = user.id;
+
+      const existingUser = userByEmail ?? userByPhone;
+
+      if (existingUser) {
+        if (existingUser.role !== Role.Visitor) {
+          throw new ConflictException('Email or phone is already registered with a different account type');
+        }
+        userId = existingUser.id;
+      } else {
+        if (!email) {
+          throw new BadRequestException('Email is required to create a new visitor account');
+        }
+        const newUser = await this.usersService.createVisitor({ fullName, email, phone });
+        userId = newUser.id;
+      }
+    }
+
+    const fvCheck = dto.fieldValues ?? {};
+    const emailCheck = pickEmail(fvCheck);
+    const phoneCheck = pickPhone(fvCheck);
+
+    if (emailCheck && (await this.registrationExistsByFieldValue(EMAIL_ALIASES, emailCheck))) {
+      throw new ConflictException('A registration with this email already exists');
+    }
+    if (phoneCheck && (await this.registrationExistsByFieldValue(PHONE_ALIASES, phoneCheck))) {
+      throw new ConflictException('A registration with this phone number already exists');
+    }
+
+    // Validate required custom fields
+    const allActiveFields = await this.customFieldsService.findActiveForForm();
+    const requiredFields = allActiveFields.filter((f) => f.isRequired);
+    const submittedFv = dto.fieldValues ?? {};
+    const missingFields: string[] = [];
+    for (const field of requiredFields) {
+      const normalizedFieldKey = normalize(field.fieldKey);
+      const hasValue = Object.entries(submittedFv).some(([key, val]) => {
+        if (normalize(key) !== normalizedFieldKey) return false;
+        if (val == null) return false;
+        if (typeof val === 'string') return val.trim().length > 0;
+        return true;
+      });
+      if (!hasValue) missingFields.push(field.label);
+    }
+    if (missingFields.length > 0) {
+      throw new BadRequestException(`Missing required fields: ${missingFields.join(', ')}`);
     }
 
     const registration = this.registrationRepo.create({
@@ -95,7 +171,9 @@ export class RegistrationsService {
       if (Object.keys(fv).length > 0) {
         await this.saveFieldValues(saved.id, fv, userId, userId);
       }
-      return this.findOne(saved.id);
+      const full = await this.findOne(saved.id);
+      this.registrationsSocket.emitNewRegistration(full);
+      return full;
     } catch (e: unknown) {
       const err = e as { code?: string; detail?: string };
       if (err?.code === '23505') {
@@ -111,7 +189,7 @@ export class RegistrationsService {
     updatedById?: string,
   ) {
     const customFields = await this.customFieldsService.findAll();
-    const fieldKeyToId = new Map(customFields.map((f) => [f.fieldKey, f.id]));
+    const normalizedKeyToId = new Map(customFields.map((f) => [normalize(f.fieldKey), f.id]));
 
     const existing = await this.fieldValueRepo.find({
       where: { registrationId },
@@ -120,7 +198,7 @@ export class RegistrationsService {
     const existingByCustomFieldId = new Map(existing.map((e) => [e.customFieldId, e]));
 
     for (const [fieldKey, value] of Object.entries(fieldValues)) {
-      const customFieldId = fieldKeyToId.get(fieldKey);
+      const customFieldId = normalizedKeyToId.get(normalize(fieldKey));
       if (!customFieldId) continue;
 
       const existingRow = existingByCustomFieldId.get(customFieldId);
@@ -148,7 +226,7 @@ export class RegistrationsService {
     updatedById?: string,
   ) {
     const customFields = await this.customFieldsService.findAll();
-    const fieldKeyToId = new Map(customFields.map((f) => [f.fieldKey, f.id]));
+    const normalizedKeyToId = new Map(customFields.map((f) => [normalize(f.fieldKey), f.id]));
 
     const toSave: Array<{
       registrationId: string;
@@ -158,7 +236,7 @@ export class RegistrationsService {
       updatedById?: string;
     }> = [];
     for (const [fieldKey, value] of Object.entries(fieldValues)) {
-      const customFieldId = fieldKeyToId.get(fieldKey);
+      const customFieldId = normalizedKeyToId.get(normalize(fieldKey));
       if (customFieldId) {
         toSave.push({ registrationId, customFieldId, value, createdById, updatedById });
       }
@@ -195,7 +273,17 @@ export class RegistrationsService {
     if (!reg) {
       throw new NotFoundException('Registration not found');
     }
-    return reg;
+
+    const history = await this.registrationRepo.find({
+      where: { userId: reg.userId },
+      relations: ['fieldValues', 'fieldValues.customField'],
+      order: { createdAt: 'DESC' },
+    });
+
+    return {
+      ...reg,
+      history: history.filter((h) => h.id !== reg.id),
+    };
   }
 
   async update(id: string, dto: UpdateRegistrationDto, actorUserId?: string) {
@@ -222,7 +310,9 @@ export class RegistrationsService {
       await this.upsertFieldValues(id, dto.fieldValues, actorUserId);
     }
 
-    return this.findOne(id);
+    const updated = await this.findOne(id);
+    this.registrationsSocket.emitRegistrationUpdated(updated);
+    return updated;
   }
 
   async remove(id: string) {
@@ -249,7 +339,9 @@ export class RegistrationsService {
     reg.updatedById = actorUserId;
 
     await this.registrationRepo.save(reg);
-    return this.findOne(id);
+    const approved = await this.findOne(id);
+    this.registrationsSocket.emitRegistrationUpdated(approved);
+    return approved;
   }
 
   async reject(id: string, dto: RejectRegistrationDto, actorUserId: string) {
@@ -265,7 +357,9 @@ export class RegistrationsService {
     reg.updatedById = actorUserId;
 
     await this.registrationRepo.save(reg);
-    return this.findOne(id);
+    const rejected = await this.findOne(id);
+    this.registrationsSocket.emitRegistrationUpdated(rejected);
+    return rejected;
   }
 
   async cancel(id: string, actorUserId?: string) {
@@ -277,6 +371,8 @@ export class RegistrationsService {
     reg.status = RegistrationStatus.Cancelled;
     if (actorUserId) reg.updatedById = actorUserId;
     await this.registrationRepo.save(reg);
-    return this.findOne(id);
+    const cancelled = await this.findOne(id);
+    this.registrationsSocket.emitRegistrationUpdated(cancelled);
+    return cancelled;
   }
 }

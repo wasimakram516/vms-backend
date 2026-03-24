@@ -3,7 +3,7 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller.js';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { appConfig, databaseConfig, jwtConfig, validate } from './config/index.js';
+import { appConfig, databaseConfig, jwtConfig, emailConfig, validate } from './config/index.js';
 import { UsersModule } from './users/users.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { CustomFieldsModule } from './custom-fields/custom-fields.module.js';
@@ -14,13 +14,15 @@ import { RegistrationsModule } from './registrations/registrations.module.js';
 import { OtpVerificationsModule } from './otp-verifications/otp-verifications.module.js';
 import { RegistrationActivityLogsModule } from './registration-activity-logs/registration-activity-logs.module.js';
 import { AuditLogsModule } from './audit-logs/audit-logs.module.js';
+import { MailModule } from './mail/mail.module.js';
+import { SocketModule } from './socket/socket.module.js';
 
 @Module({
   controllers: [AppController],
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, jwtConfig],
+      load: [appConfig, databaseConfig, jwtConfig, emailConfig],
       validate,
       expandVariables: true,
       cache: true,
@@ -43,6 +45,8 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module.js';
         retryDelay: 3000,
       }),
     }),
+    MailModule,
+    SocketModule,
     UsersModule,
     AuthModule,
     CustomFieldsModule,

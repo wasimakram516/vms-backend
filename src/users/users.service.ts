@@ -96,6 +96,24 @@ export class UsersService {
     return this.usersRepository.findOne({ where: { email }, select: ['id', 'email', 'role'] });
   }
 
+  async findByPhone(phone: string): Promise<User | null> {
+    return this.usersRepository.findOne({ where: { phone }, select: ['id', 'phone', 'role'] });
+  }
+
+  async findByIdentity(target: string): Promise<{ user: User | null; isNewUser: boolean }> {
+    let user = await this.usersRepository.findOne({
+      where: { email: target },
+      select: ['id', 'fullName', 'email', 'phone', 'role'],
+    });
+    if (!user) {
+      user = await this.usersRepository.findOne({
+        where: { phone: target },
+        select: ['id', 'fullName', 'email', 'phone', 'role'],
+      });
+    }
+    return { user, isNewUser: !user };
+  }
+
   async updateUser(id: string, dto: UpdateUserDto, actor?: User): Promise<User> {
     const user = await this.usersRepository.findOne({ where: { id } });
     if (!user) {
