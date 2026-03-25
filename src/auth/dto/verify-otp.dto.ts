@@ -6,6 +6,6 @@ export class VerifyOtpDto {
   target: string; // email or phone number
 
   @IsNumberString()
-  @Length(6, 6)
+  @Length(4, 4)
   code: string;
 }
