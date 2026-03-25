@@ -89,6 +89,13 @@ export class OtpVerificationsService {
     });
 
     if (!record) {
+      const latest = await this.otpRepo.findOne({
+        where: { target },
+        order: { createdAt: 'DESC' },
+      });
+      if (latest?.verifiedAt) {
+        throw new UnauthorizedException('This OTP has already been used. Please request a new one.');
+      }
       throw new UnauthorizedException('Invalid or expired OTP');
     }
 
