@@ -1,5 +1,5 @@
 import { plainToInstance } from 'class-transformer';
-import { IsBoolean, IsEnum, IsNumber, IsOptional, IsString, Max, Min, validateSync } from 'class-validator';
+import { IsBoolean, IsEnum, IsNumber, IsString, Max, Min, validateSync } from 'class-validator';
 
 enum Environment {
   Development = 'development',
@@ -17,83 +17,69 @@ class EnvironmentVariables {
   PORT: number = 3000;
 
   @IsString()
-  @IsOptional()
-  API_PREFIX?: string;
+  API_PREFIX: string;
 
   @IsString()
-  @IsOptional()
-  CORS_ORIGINS?: string;
+  CORS_ORIGINS: string;
 
   @IsString()
-  DATABASE_HOST: string = 'localhost';
+  DATABASE_HOST: string;
 
   @IsNumber()
   @Min(1)
   @Max(65535)
-  DATABASE_PORT: number = 5432;
+  DATABASE_PORT: number;
 
   @IsString()
-  DATABASE_USER: string = 'postgres';
+  DATABASE_USER: string;
 
   @IsString()
-  DATABASE_PASSWORD: string = 'postgres';
+  DATABASE_PASSWORD: string;
 
   @IsString()
-  DATABASE_NAME: string = 'sinan_dev';
+  DATABASE_NAME: string;
 
   @IsBoolean()
-  @IsOptional()
-  DATABASE_LOGGING?: boolean;
+  DATABASE_LOGGING: boolean;
 
   @IsString()
-  JWT_SECRET: string = 'dev-secret-change-in-production';
+  JWT_SECRET: string;
 
   @IsString()
-  JWT_EXPIRES_IN: string = '7d';
+  JWT_EXPIRES_IN: string;
 
   @IsNumber()
-  @IsOptional()
-  THROTTLE_TTL?: number;
+  THROTTLE_TTL: number;
 
   @IsNumber()
-  @IsOptional()
-  THROTTLE_LIMIT?: number;
+  THROTTLE_LIMIT: number;
 
   @IsString()
-  @IsOptional()
-  MASTER_KEY?: string;
+  MASTER_KEY: string;
 
   @IsString()
-  @IsOptional()
-  SUPERADMIN_EMAIL?: string;
+  SUPERADMIN_EMAIL: string;
 
   @IsString()
-  @IsOptional()
-  SUPERADMIN_PASSWORD?: string;
+  SUPERADMIN_PASSWORD: string;
 
   @IsString()
-  @IsOptional()
-  SUPERADMIN_FULL_NAME?: string;
+  SUPERADMIN_FULL_NAME: string;
 
   @IsString()
-  @IsOptional()
-  SMTP_HOST?: string;
+  SMTP_HOST: string;
 
   @IsNumber()
-  @IsOptional()
-  SMTP_PORT?: number;
+  SMTP_PORT: number;
 
   @IsString()
-  @IsOptional()
-  SMTP_USER?: string;
+  SMTP_USER: string;
 
   @IsString()
-  @IsOptional()
-  SMTP_PASS?: string;
+  SMTP_PASS: string;
 
   @IsString()
-  @IsOptional()
-  SMTP_FROM?: string;
+  SMTP_FROM: string;
 }
 
 export function validate(config: Record<string, unknown>) {
