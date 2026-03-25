@@ -44,7 +44,10 @@ export class Registration {
   qrTemplateId: string;
 
   @Column({ type: 'date' })
-  requestedDate: string;
+  requestedDateFrom: string;
+
+  @Column({ type: 'date' })
+  requestedDateTo: string;
 
   @Column({ type: 'time' })
   requestedTimeFrom: string;
@@ -53,13 +56,19 @@ export class Registration {
   requestedTimeTo: string;
 
   @Column({ type: 'date', nullable: true })
-  approvedDate: string;
+  approvedDateFrom: string;
+
+  @Column({ type: 'date', nullable: true })
+  approvedDateTo: string;
 
   @Column({ type: 'time', nullable: true })
   approvedTimeFrom: string;
 
   @Column({ type: 'time', nullable: true })
   approvedTimeTo: string;
+
+  @Column({ nullable: true, default: 'UTC' })
+  approvedTimezone: string;
 
   @Column({ nullable: true })
   purposeOfVisit: string;

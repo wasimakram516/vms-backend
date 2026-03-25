@@ -23,10 +23,15 @@ export class MailService {
     });
   }
 
-  async sendEmail(to: string, subject: string, html: string): Promise<void> {
+  async sendEmail(
+    to: string,
+    subject: string,
+    html: string,
+    attachments?: Array<{ filename: string; content: Buffer; cid: string }>,
+  ): Promise<void> {
     const from = this.configService.get<string>('email.from');
     try {
-      const info = await this.transporter.sendMail({ from, to, subject, html });
+      const info = await this.transporter.sendMail({ from, to, subject, html, attachments });
       const smtpResponse = info?.response || '';
       const smtpCode = parseInt(smtpResponse.split(' ')[0]) || 0;
       const accepted = info?.accepted?.length > 0;

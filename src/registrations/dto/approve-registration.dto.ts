@@ -3,7 +3,11 @@ import { IsOptional, IsString } from 'class-validator';
 export class ApproveRegistrationDto {
   @IsString()
   @IsOptional()
-  approvedDate?: string;
+  approvedDateFrom?: string;
+
+  @IsString()
+  @IsOptional()
+  approvedDateTo?: string;
 
   @IsString()
   @IsOptional()
@@ -12,4 +16,8 @@ export class ApproveRegistrationDto {
   @IsString()
   @IsOptional()
   approvedTimeTo?: string;
+
+  @IsString()
+  @IsOptional()
+  approvedTimezone?: string;
 }

@@ -19,7 +19,11 @@ export class CreateRegistrationDto {
 
   @IsString()
   @IsNotEmpty()
-  requestedDate: string;
+  requestedDateFrom: string;
+
+  @IsString()
+  @IsNotEmpty()
+  requestedDateTo: string;
 
   @IsString()
   @IsNotEmpty()

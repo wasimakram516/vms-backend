@@ -43,6 +43,7 @@ export class UsersService {
     password: string;
     role: Role;
     phone?: string;
+    staffType?: import('../common/enums/staff-type.enum.js').StaffType;
   }): Promise<User> {
     const passwordHash = await hash(data.password, 10);
 
@@ -52,6 +53,7 @@ export class UsersService {
       role: data.role,
       passwordHash,
       phone: data.phone,
+      staffType: data.staffType,
     });
 
     try {
@@ -130,6 +132,7 @@ export class UsersService {
     if (dto.email !== undefined) patch.email = dto.email;
     if (dto.role !== undefined) patch.role = dto.role;
     if (dto.password !== undefined) patch.passwordHash = await hash(dto.password, 10);
+    if (dto.staffType !== undefined) patch.staffType = dto.staffType;
 
     Object.assign(user, patch);
 

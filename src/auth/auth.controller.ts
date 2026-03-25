@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Post, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { CurrentUser } from './decorators/current-user.decorator.js';
@@ -11,6 +12,7 @@ import { OtpVerificationsService } from '../otp-verifications/otp-verifications.
 
 const REFRESH_COOKIE = 'refreshToken';
 
+@ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -20,6 +22,7 @@ export class AuthController {
   ) {}
 
   // user login
+  @ApiOperation({ summary: 'Login with email and password' })
   @Post('login')
   async login(@Body() body: LoginDto, @Res({ passthrough: true }) res: Response) {
     const user = await this.authService.validateUser(body.email, body.password);
@@ -39,6 +42,7 @@ export class AuthController {
   }
 
   // refresh — verifies cookie, rotates both tokens and sets new refresh cookie
+  @ApiOperation({ summary: 'Refresh access token using refresh cookie' })
   @Post('refresh')
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const token: string | undefined = req.cookies?.[REFRESH_COOKIE];
@@ -62,6 +66,8 @@ export class AuthController {
   }
 
   // logout — requires valid access token, clears the refresh token cookie
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Logout and clear refresh token cookie' })
   @UseGuards(JwtAuthGuard)
   @Post('logout')
   async logout(@Res({ passthrough: true }) res: Response) {
@@ -70,6 +76,8 @@ export class AuthController {
   }
 
   // get current authenticated user
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get current authenticated user' })
   @UseGuards(JwtAuthGuard)
   @Get('me')
   async me(@CurrentUser() user: any) {
@@ -77,6 +85,7 @@ export class AuthController {
   }
 
   // send OTP to visitor email or phone
+  @ApiOperation({ summary: 'Send OTP to visitor email or phone' })
   @Post('otp/send')
   async sendOtp(@Body() body: SendOtpDto) {
     await this.otpService.sendOtp(body.target);
@@ -84,6 +93,7 @@ export class AuthController {
   }
 
   // verify OTP and return visitor identity
+  @ApiOperation({ summary: 'Verify OTP and return visitor identity' })
   @Post('otp/verify')
   async verifyOtp(@Body() body: VerifyOtpDto) {
     return this.otpService.verifyOtp(body.target, body.code);

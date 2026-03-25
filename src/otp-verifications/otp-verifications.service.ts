@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull, MoreThan } from 'typeorm';
 import { randomInt } from 'crypto';
@@ -26,6 +26,12 @@ export class OtpVerificationsService {
   ) {}
 
   async sendOtp(target: string): Promise<void> {
+    // Ensure the email belongs to an existing visitor
+    const existing = await this.usersService.findByEmail(target);
+    if (!existing) {
+      throw new NotFoundException('No visitor found with this email address');
+    }
+
     // Invalidate all previous unused OTPs for this target
     await this.otpRepo
       .createQueryBuilder()
@@ -35,8 +41,8 @@ export class OtpVerificationsService {
       .andWhere('verifiedAt IS NULL')
       .execute();
 
-    // Generate 6-digit code and hash it
-    const code = randomInt(100000, 999999).toString();
+    // Generate 4-digit code and hash it
+    const code = randomInt(1000, 9999).toString();
     const codeHash = await hash(code, 10);
 
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes

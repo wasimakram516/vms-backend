@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ForbiddenException } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { UsersService } from './users.service.js';
 import { Role } from '../common/enums/role.enum.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
@@ -9,11 +10,14 @@ import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { CurrentUser } from '../auth/decorators/current-user.decorator.js';
 
+@ApiTags('Users')
+@ApiBearerAuth()
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   //lists all users, optionally filtered by role
+  @ApiOperation({ summary: 'List all users (filterable by role)' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SuperAdmin, Role.Admin)
   @Get()
@@ -22,6 +26,7 @@ export class UsersController {
   }
 
   //Get a single user by id
+  @ApiOperation({ summary: 'Get a single user by ID' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SuperAdmin, Role.Admin)
   @Get(':id')
@@ -30,6 +35,7 @@ export class UsersController {
   }
 
   // super admin creates an admin user
+  @ApiOperation({ summary: 'Create an admin user (SuperAdmin only)' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SuperAdmin)
   @Post('admin')
@@ -39,12 +45,14 @@ export class UsersController {
       email: body.email,
       password: body.password,
       role: Role.Admin,
+      staffType: body.staffType,
     });
 
     return { id: user.id, fullName: user.fullName, email: user.email, role: user.role };
   }
 
   // super admin or admin creates a staff user
+  @ApiOperation({ summary: 'Create a staff user (SuperAdmin or Admin)' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SuperAdmin, Role.Admin)
   @Post('staff')
@@ -54,12 +62,14 @@ export class UsersController {
       email: body.email,
       password: body.password,
       role: Role.Staff,
+      staffType: body.staffType,
     });
 
     return { id: user.id, fullName: user.fullName, email: user.email, role: user.role };
   }
 
   // super admin or admin updates user fields (role updates restricted to super admin)
+  @ApiOperation({ summary: 'Update a user (role change restricted to SuperAdmin)' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SuperAdmin, Role.Admin)
   @Patch(':id')
@@ -71,6 +81,7 @@ export class UsersController {
   }
 
   // only super admin can delete users
+  @ApiOperation({ summary: 'Delete a user (SuperAdmin only)' })
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SuperAdmin)
   @Delete(':id')

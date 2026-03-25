@@ -17,6 +17,10 @@ import { UpdateRegistrationDto } from './dto/update-registration.dto.js';
 import { ApproveRegistrationDto } from './dto/approve-registration.dto.js';
 import { RejectRegistrationDto } from './dto/reject-registration.dto.js';
 import { RegistrationsSocket } from '../socket/registrations.socket.js';
+import { MailService } from '../mail/mail.service.js';
+import { buildRegistrationStatusEmail } from '../mail/templates/approval.template.js';
+import { nanoid } from 'nanoid';
+import * as QRCode from 'qrcode';
 
 function normalize(str = ''): string {
   return String(str).toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -56,6 +60,7 @@ export class RegistrationsService {
     private readonly customFieldsService: CustomFieldsService,
     private readonly usersService: UsersService,
     private readonly registrationsSocket: RegistrationsSocket,
+    private readonly mailService: MailService,
   ) {}
 
   async getFormFields() {
@@ -157,11 +162,13 @@ export class RegistrationsService {
       ndaAcceptanceId: dto.ndaAcceptanceId,
       badgeTemplateId: dto.badgeTemplateId,
       qrTemplateId: dto.qrTemplateId,
-      requestedDate: dto.requestedDate,
+      requestedDateFrom: dto.requestedDateFrom,
+      requestedDateTo: dto.requestedDateTo,
       requestedTimeFrom: dto.requestedTimeFrom,
       requestedTimeTo: dto.requestedTimeTo,
       purposeOfVisit: dto.purposeOfVisit,
       status: RegistrationStatus.Pending,
+      qrToken: nanoid(10),
       createdById: userId,
     });
 
@@ -296,7 +303,8 @@ export class RegistrationsService {
     if (dto.ndaAcceptanceId !== undefined) patch.ndaAcceptanceId = dto.ndaAcceptanceId;
     if (dto.badgeTemplateId !== undefined) patch.badgeTemplateId = dto.badgeTemplateId;
     if (dto.qrTemplateId !== undefined) patch.qrTemplateId = dto.qrTemplateId;
-    if (dto.requestedDate !== undefined) patch.requestedDate = dto.requestedDate;
+    if (dto.requestedDateFrom !== undefined) patch.requestedDateFrom = dto.requestedDateFrom;
+    if (dto.requestedDateTo !== undefined) patch.requestedDateTo = dto.requestedDateTo;
     if (dto.requestedTimeFrom !== undefined) patch.requestedTimeFrom = dto.requestedTimeFrom;
     if (dto.requestedTimeTo !== undefined) patch.requestedTimeTo = dto.requestedTimeTo;
     if (dto.purposeOfVisit !== undefined) patch.purposeOfVisit = dto.purposeOfVisit;
@@ -332,15 +340,18 @@ export class RegistrationsService {
     reg.status = RegistrationStatus.Approved;
     reg.approvedByUserId = actorUserId;
     reg.approvedAt = new Date();
-    reg.approvedDate = dto.approvedDate ?? reg.requestedDate;
+    reg.approvedDateFrom = dto.approvedDateFrom ?? reg.requestedDateFrom;
+    reg.approvedDateTo = dto.approvedDateTo ?? reg.requestedDateTo;
     reg.approvedTimeFrom = dto.approvedTimeFrom ?? reg.requestedTimeFrom;
     reg.approvedTimeTo = dto.approvedTimeTo ?? reg.requestedTimeTo;
+    reg.approvedTimezone = dto.approvedTimezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     reg.rejectionReason = null;
     reg.updatedById = actorUserId;
 
     await this.registrationRepo.save(reg);
     const approved = await this.findOne(id);
     this.registrationsSocket.emitRegistrationUpdated(approved);
+    await this.sendStatusEmail(approved, reg, 'approved');
     return approved;
   }
 
@@ -359,6 +370,7 @@ export class RegistrationsService {
     await this.registrationRepo.save(reg);
     const rejected = await this.findOne(id);
     this.registrationsSocket.emitRegistrationUpdated(rejected);
+    await this.sendStatusEmail(rejected, reg, 'rejected');
     return rejected;
   }
 
@@ -373,6 +385,158 @@ export class RegistrationsService {
     await this.registrationRepo.save(reg);
     const cancelled = await this.findOne(id);
     this.registrationsSocket.emitRegistrationUpdated(cancelled);
+    await this.sendStatusEmail(cancelled, reg, 'cancelled');
     return cancelled;
+  }
+
+  private async sendStatusEmail(
+    result: Awaited<ReturnType<typeof this.findOne>>,
+    reg: Registration,
+    status: 'approved' | 'rejected' | 'cancelled',
+  ): Promise<void> {
+    const visitorEmail = result.user?.email;
+    if (!visitorEmail) return;
+
+    try {
+      let qrBuffer: Buffer | undefined;
+      if (status === 'approved' && reg.qrToken) {
+        qrBuffer = await QRCode.toBuffer(reg.qrToken, { width: 300, margin: 2 });
+      }
+
+      const subjects: Record<typeof status, string> = {
+        approved: 'Your Visit Has Been Approved',
+        rejected: 'Your Visit Request Has Been Rejected',
+        cancelled: 'Your Visit Has Been Cancelled',
+      };
+
+      const html = buildRegistrationStatusEmail({
+        status,
+        visitorName: result.user.fullName ?? 'Visitor',
+        approvedDateFrom: reg.approvedDateFrom,
+        approvedDateTo: reg.approvedDateTo,
+        approvedTimeFrom: reg.approvedTimeFrom,
+        approvedTimeTo: reg.approvedTimeTo,
+        purposeOfVisit: reg.purposeOfVisit ?? null,
+        qrToken: reg.qrToken ?? undefined,
+        rejectionReason: reg.rejectionReason ?? null,
+      });
+
+      const attachments = qrBuffer
+        ? [{ filename: 'qrcode.png', content: qrBuffer, cid: 'qrcode@sinan' }]
+        : undefined;
+
+      await this.mailService.sendEmail(visitorEmail, subjects[status], html, attachments);
+    } catch {
+      // Email failure must not block the response
+    }
+  }
+
+  async verifyByToken(token: string) {
+    const reg = await this.registrationRepo.findOne({
+      where: { qrToken: token },
+      relations: ['user', 'fieldValues', 'fieldValues.customField'],
+    });
+
+    if (!reg) {
+      throw new NotFoundException('Invalid QR token');
+    }
+
+    const isAccessible =
+      reg.status === RegistrationStatus.Approved ||
+      reg.status === RegistrationStatus.CheckedIn ||
+      reg.status === RegistrationStatus.CheckedOut;
+
+    if (!isAccessible) {
+      return {
+        id: reg.id,
+        status: reg.status,
+        notApproved: true,
+        visitor: {
+          fullName: reg.user?.fullName ?? null,
+          companyName: reg.user?.companyName ?? null,
+          purposeOfVisit: reg.purposeOfVisit ?? null,
+        },
+      };
+    }
+
+    const history = await this.registrationRepo.find({
+      where: { userId: reg.userId },
+      relations: ['fieldValues', 'fieldValues.customField'],
+      order: { createdAt: 'DESC' },
+    });
+
+    return {
+      ...reg,
+      notApproved: false,
+      history: history.filter((h) => h.id !== reg.id),
+    };
+  }
+
+  async checkIn(id: string, actorUserId: string) {
+    const reg = await this.registrationRepo.findOne({ where: { id } });
+    if (!reg) {
+      throw new NotFoundException('Registration not found');
+    }
+
+    if (reg.status !== RegistrationStatus.Approved) {
+      throw new BadRequestException('Registration must be approved before check-in');
+    }
+
+    const now = new Date();
+    const tz = reg.approvedTimezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    });
+    const parts = Object.fromEntries(
+      formatter.formatToParts(now).map((p) => [p.type, p.value]),
+    );
+    const todayStr = `${parts.year}-${parts.month}-${parts.day}`;
+    const currentTimeStr = `${parts.hour}:${parts.minute}:${parts.second}`;
+
+    const dateInRange =
+      todayStr >= reg.approvedDateFrom && todayStr <= reg.approvedDateTo;
+    const timeInRange =
+      currentTimeStr >= reg.approvedTimeFrom && currentTimeStr <= reg.approvedTimeTo;
+
+    console.log('[CheckIn Debug]', { dateInRange, timeInRange });
+
+    if (!dateInRange || !timeInRange) {
+      throw new BadRequestException(
+        "It's not their time yet. The visitor's approved time window has not started or has already passed.",
+      );
+    }
+
+    reg.status = RegistrationStatus.CheckedIn;
+    reg.checkedInAt = now;
+    reg.updatedById = actorUserId;
+
+    await this.registrationRepo.save(reg);
+    const updated = await this.findOne(id);
+    this.registrationsSocket.emitRegistrationUpdated(updated);
+    return updated;
+  }
+
+  async checkOut(id: string, actorUserId: string) {
+    const reg = await this.registrationRepo.findOne({ where: { id } });
+    if (!reg) {
+      throw new NotFoundException('Registration not found');
+    }
+
+    if (reg.status !== RegistrationStatus.CheckedIn) {
+      throw new BadRequestException('Visitor must be checked in before checking out');
+    }
+
+    reg.status = RegistrationStatus.CheckedOut;
+    reg.checkedOutAt = new Date();
+    reg.updatedById = actorUserId;
+
+    await this.registrationRepo.save(reg);
+    const updated = await this.findOne(id);
+    this.registrationsSocket.emitRegistrationUpdated(updated);
+    return updated;
   }
 }

@@ -16,7 +16,11 @@ export class UpdateRegistrationDto {
 
   @IsString()
   @IsOptional()
-  requestedDate?: string;
+  requestedDateFrom?: string;
+
+  @IsString()
+  @IsOptional()
+  requestedDateTo?: string;
 
   @IsString()
   @IsOptional()

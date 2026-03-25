@@ -1,4 +1,5 @@
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import { StaffType } from '../../common/enums/staff-type.enum.js';
 
 export class CreateUserDto {
   @IsString()
@@ -10,5 +11,9 @@ export class CreateUserDto {
   @IsString()
   @MinLength(6)
   password: string;
+
+  @IsOptional()
+  @IsEnum(StaffType)
+  staffType?: StaffType;
 }
 
