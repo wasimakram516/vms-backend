@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull, MoreThan } from 'typeorm';
 import { randomInt } from 'crypto';
@@ -32,6 +32,20 @@ export class OtpVerificationsService {
       throw new NotFoundException('No visitor found with this email address');
     }
 
+    // Enforce 60-second cooldown between OTP requests
+    const cooldownFrom = new Date(Date.now() - 60 * 1000);
+    const recent = await this.otpRepo.findOne({
+      where: { target, createdAt: MoreThan(cooldownFrom) },
+      order: { createdAt: 'DESC' },
+    });
+    if (recent) {
+      const secondsLeft = Math.ceil((recent.createdAt.getTime() + 60 * 1000 - Date.now()) / 1000);
+      throw new HttpException(
+        `Please wait ${secondsLeft} second(s) before requesting a new OTP`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
     // Invalidate all previous unused OTPs for this target
     await this.otpRepo
       .createQueryBuilder()
@@ -42,7 +56,7 @@ export class OtpVerificationsService {
       .execute();
 
     // Generate 4-digit code and hash it
-    const code = randomInt(1000, 9999).toString();
+    const code = randomInt(1000, 10000).toString();
     const codeHash = await hash(code, 10);
 
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
