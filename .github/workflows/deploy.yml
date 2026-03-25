@@ -102,6 +102,11 @@ jobs:
             echo "SUPERADMIN_EMAIL=${{ secrets.SUPERADMIN_EMAIL }}"
             echo "SUPERADMIN_PASSWORD=${{ secrets.SUPERADMIN_PASSWORD }}"
             echo "SUPERADMIN_FULL_NAME=${{ secrets.SUPERADMIN_FULL_NAME }}"
+            echo "EMAIL_HOST=smtp.sendgrid.net"
+            echo "EMAIL_PORT=587"
+            echo "EMAIL_USER=apikey"
+            echo "EMAIL_PASS=${{ secrets.EMAIL_PASS }}"
+            echo "EMAIL_FROM=${{ secrets.EMAIL_FROM }}"
           } | sudo tee /var/www/sinan/backend/.env > /dev/null
 
       - name: Install production dependencies & restart PM2
@@ -156,6 +161,11 @@ jobs:
             echo "SUPERADMIN_EMAIL=${{ secrets.SUPERADMIN_EMAIL }}"
             echo "SUPERADMIN_PASSWORD=${{ secrets.SUPERADMIN_PASSWORD }}"
             echo "SUPERADMIN_FULL_NAME=${{ secrets.SUPERADMIN_FULL_NAME }}"
+            echo "EMAIL_HOST=smtp.sendgrid.net"
+            echo "EMAIL_PORT=587"
+            echo "EMAIL_USER=apikey"
+            echo "EMAIL_PASS=${{ secrets.EMAIL_PASS }}"
+            echo "EMAIL_FROM=${{ secrets.EMAIL_FROM }}"
           } | sudo tee /var/www/sinan/backend/.env > /dev/null
 
       - name: Install production dependencies & restart PM2
