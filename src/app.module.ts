@@ -16,6 +16,7 @@ import { RegistrationActivityLogsModule } from './registration-activity-logs/reg
 import { AuditLogsModule } from './audit-logs/audit-logs.module.js';
 import { MailModule } from './mail/mail.module.js';
 import { SocketModule } from './socket/socket.module.js';
+import { HostsModule } from './hosts/hosts.module.js';
 
 @Module({
   controllers: [AppController],
@@ -47,6 +48,7 @@ import { SocketModule } from './socket/socket.module.js';
     }),
     MailModule,
     SocketModule,
+    HostsModule,
     UsersModule,
     AuthModule,
     CustomFieldsModule,
