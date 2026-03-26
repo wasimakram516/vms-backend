@@ -127,15 +127,17 @@ export class RegistrationsService {
       }
     }
 
-    const fvCheck = dto.fieldValues ?? {};
-    const emailCheck = pickEmail(fvCheck);
-    const phoneCheck = pickPhone(fvCheck);
+    if (!dto.userId) {
+      const fvCheck = dto.fieldValues ?? {};
+      const emailCheck = pickEmail(fvCheck);
+      const phoneCheck = pickPhone(fvCheck);
 
-    if (emailCheck && (await this.registrationExistsByFieldValue(EMAIL_ALIASES, emailCheck))) {
-      throw new ConflictException('A registration with this email already exists');
-    }
-    if (phoneCheck && (await this.registrationExistsByFieldValue(PHONE_ALIASES, phoneCheck))) {
-      throw new ConflictException('A registration with this phone number already exists');
+      if (emailCheck && (await this.registrationExistsByFieldValue(EMAIL_ALIASES, emailCheck))) {
+        throw new ConflictException('A registration with this email already exists');
+      }
+      if (phoneCheck && (await this.registrationExistsByFieldValue(PHONE_ALIASES, phoneCheck))) {
+        throw new ConflictException('A registration with this phone number already exists');
+      }
     }
 
     // Validate required custom fields
