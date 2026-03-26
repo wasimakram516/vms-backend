@@ -19,6 +19,8 @@ import { RejectRegistrationDto } from './dto/reject-registration.dto.js';
 import { RegistrationsSocket } from '../socket/registrations.socket.js';
 import { MailService } from '../mail/mail.service.js';
 import { buildRegistrationStatusEmail } from '../mail/templates/approval.template.js';
+import { generateNdaPdf } from '../mail/templates/nda.pdf.js';
+import { HostsService } from '../hosts/hosts.service.js';
 import { nanoid } from 'nanoid';
 import * as QRCode from 'qrcode';
 
@@ -42,13 +44,31 @@ function pick(
   return undefined;
 }
 
-const EMAIL_ALIASES = ['email', 'e-mail', 'email address', 'visitor email', 'user email'];
-const PHONE_ALIASES = ['phone', 'phone number', 'mobile', 'contact', 'whatsapp', 'visitor phone', 'user phone'];
-const NAME_ALIASES  = ['fullname', 'full name', 'name', 'visitor name', 'visitor full name'];
+const EMAIL_ALIASES        = ['email', 'e-mail', 'email address', 'visitor email', 'user email'];
+const PHONE_ALIASES        = ['phone', 'phone number', 'mobile', 'contact', 'whatsapp', 'visitor phone', 'user phone'];
+const NAME_ALIASES         = ['fullname', 'full name', 'name', 'visitor name', 'visitor full name'];
+const ORGANISATION_ALIASES = ['organisation', 'organization', 'company', 'company name', 'organisation name', 'organization name', 'employer', 'firm'];
+const ID_ALIASES           = ['civilid', 'civil id', 'national id', 'nationalid', 'id number', 'idnumber', 'passport', 'passport number', 'passportno', 'id card', 'identity number', 'eid'];
 
-const pickEmail = (f: Record<string, unknown>) => pick(f, 'email', EMAIL_ALIASES);
-const pickPhone = (f: Record<string, unknown>) => pick(f, 'phone', PHONE_ALIASES);
-const pickName  = (f: Record<string, unknown>) => pick(f, 'fullname', NAME_ALIASES);
+const pickEmail        = (f: Record<string, unknown>) => pick(f, 'email', EMAIL_ALIASES);
+const pickPhone        = (f: Record<string, unknown>) => pick(f, 'phone', PHONE_ALIASES);
+const pickName         = (f: Record<string, unknown>) => pick(f, 'fullname', NAME_ALIASES);
+const pickOrganisation = (f: Record<string, unknown>) => pick(f, 'organisation', ORGANISATION_ALIASES);
+const pickId           = (f: Record<string, unknown>) => pick(f, 'civilid', ID_ALIASES);
+
+function formatNdaDate(dateStr: string): string {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const [year, month, day] = dateStr.split('-');
+  return `${parseInt(day)} ${months[parseInt(month) - 1]} ${year}`;
+}
+
+function formatNdaTime(timeStr: string): string {
+  const [hourStr, minuteStr] = timeStr.split(':');
+  let hour = parseInt(hourStr);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12 || 12;
+  return `${hour}:${minuteStr} ${ampm}`;
+}
 
 @Injectable()
 export class RegistrationsService {
@@ -61,6 +81,7 @@ export class RegistrationsService {
     private readonly usersService: UsersService,
     private readonly registrationsSocket: RegistrationsSocket,
     private readonly mailService: MailService,
+    private readonly hostsService: HostsService,
   ) {}
 
   async getFormFields() {
@@ -499,16 +520,14 @@ export class RegistrationsService {
     const todayStr = `${parts.year}-${parts.month}-${parts.day}`;
     const currentTimeStr = `${parts.hour}:${parts.minute}:${parts.second}`;
 
-    const dateInRange =
-      todayStr >= reg.approvedDateFrom && todayStr <= reg.approvedDateTo;
-    const timeInRange =
-      currentTimeStr >= reg.approvedTimeFrom && currentTimeStr <= reg.approvedTimeTo;
+    const nowDatetime   = `${todayStr}T${currentTimeStr}`;
+    const windowStart   = `${reg.approvedDateFrom}T${reg.approvedTimeFrom}`;
+    const windowEnd     = `${reg.approvedDateTo}T${reg.approvedTimeTo}`;
+    const inRange       = nowDatetime >= windowStart && nowDatetime <= windowEnd;
 
-    console.log('[CheckIn Debug]', { dateInRange, timeInRange });
-
-    if (!dateInRange || !timeInRange) {
+    if (!inRange) {
       throw new BadRequestException(
-        "It's not their time yet. The visitor's approved time window has not started or has already passed.",
+        `Check-in is not permitted at this time. The visitor's approved window is ${reg.approvedDateFrom} ${reg.approvedTimeFrom} to ${reg.approvedDateTo} ${reg.approvedTimeTo}.`,
       );
     }
 
@@ -519,7 +538,59 @@ export class RegistrationsService {
     await this.registrationRepo.save(reg);
     const updated = await this.findOne(id);
     this.registrationsSocket.emitRegistrationUpdated(updated);
+    this.sendNdaToHost(updated).catch(() => {});
     return updated;
+  }
+
+  private async sendNdaToHost(reg: Awaited<ReturnType<typeof this.findOne>>): Promise<void> {
+    try {
+      const host = await this.hostsService.get();
+      if (!host.email) return;
+
+      const fields: Record<string, unknown> = {};
+      for (const fv of reg.fieldValues ?? []) {
+        if (fv.customField?.fieldKey) {
+          fields[fv.customField.fieldKey] = fv.value;
+        }
+      }
+
+      const visitorName = reg.user?.fullName ?? 'Visitor';
+
+      const dateFrom = reg.approvedDateFrom ?? '';
+      const dateTo   = reg.approvedDateTo ?? '';
+      const dateOfVisit = dateFrom
+        ? (dateFrom === dateTo
+            ? formatNdaDate(dateFrom)
+            : `${formatNdaDate(dateFrom)} – ${formatNdaDate(dateTo)}`)
+        : '—';
+
+      const timeFrom = reg.approvedTimeFrom ?? '';
+      const timeTo   = reg.approvedTimeTo ?? '';
+      const visitTime = timeFrom
+        ? `${formatNdaTime(timeFrom)} – ${formatNdaTime(timeTo)}`
+        : '—';
+
+      const pdfBuffer = await generateNdaPdf({
+        hostName: host.name,
+        visitorFullName: visitorName,
+        visitorOrganisation: pickOrganisation(fields) ?? '—',
+        visitorIdNumber: pickId(fields) ?? '—',
+        dateOfVisit,
+        visitTime,
+        purpose: reg.purposeOfVisit ?? '—',
+      });
+
+      const filename = `NDA — ${visitorName}.pdf`;
+
+      await this.mailService.sendEmail(
+        host.email,
+        `NDA — ${visitorName} Check-In`,
+        `<p>Please find attached the signed NDA for <strong>${visitorName}</strong> who checked in on ${reg.approvedDateFrom}.</p>`,
+        [{ filename, content: pdfBuffer, cid: 'nda@sinan' }],
+      );
+    } catch {
+      // NDA email failure must not block check-in
+    }
   }
 
   async checkOut(id: string, actorUserId: string) {
