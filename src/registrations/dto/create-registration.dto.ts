@@ -34,8 +34,8 @@ export class CreateRegistrationDto {
   requestedTimeTo: string;
 
   @IsString()
-  @IsOptional()
-  purposeOfVisit?: string;
+  @IsNotEmpty()
+  purposeOfVisit: string;
 
   @IsObject()
   @IsOptional()
