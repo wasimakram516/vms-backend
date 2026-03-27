@@ -107,6 +107,11 @@ jobs:
             echo "SMTP_USER=apikey"
             echo "SMTP_PASS=${{ secrets.SMTP_PASS }}"
             echo "SMTP_FROM=${{ secrets.SMTP_FROM }}"
+            echo "AWS_REGION=${{ secrets.AWS_REGION }}"
+            echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}"
+            echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+            echo "S3_BUCKET=${{ secrets.S3_BUCKET }}"
+            echo "CLOUDFRONT_URL=${{ secrets.CLOUDFRONT_URL }}"
           } | sudo tee /var/www/sinan/backend/.env > /dev/null
 
       - name: Install production dependencies & restart PM2
@@ -166,6 +171,11 @@ jobs:
             echo "SMTP_USER=apikey"
             echo "SMTP_PASS=${{ secrets.SMTP_PASS }}"
             echo "SMTP_FROM=${{ secrets.SMTP_FROM }}"
+            echo "AWS_REGION=${{ secrets.AWS_REGION }}"
+            echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}"
+            echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+            echo "S3_BUCKET=${{ secrets.S3_BUCKET }}"
+            echo "CLOUDFRONT_URL=${{ secrets.CLOUDFRONT_URL }}"
           } | sudo tee /var/www/sinan/backend/.env > /dev/null
 
       - name: Install production dependencies & restart PM2

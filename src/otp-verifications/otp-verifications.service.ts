@@ -11,6 +11,7 @@ import { User } from '../users/entities/user.entity.js';
 import { Registration } from '../registrations/entities/registration.entity.js';
 import { RegistrationFieldValue } from '../registrations/entities/registration-field-value.entity.js';
 import { buildOtpEmail } from '../mail/templates/otp.template.js';
+import { HostsService } from '../hosts/hosts.service.js';
 
 @Injectable()
 export class OtpVerificationsService {
@@ -23,6 +24,7 @@ export class OtpVerificationsService {
     private readonly fieldValueRepo: Repository<RegistrationFieldValue>,
     private readonly mailService: MailService,
     private readonly usersService: UsersService,
+    private readonly hostsService: HostsService,
   ) {}
 
   async sendOtp(target: string): Promise<void> {
@@ -71,7 +73,17 @@ export class OtpVerificationsService {
       }),
     );
 
-    const html = buildOtpEmail(code);
+    let hostName: string | undefined;
+    let hostLogoUrl: string | null | undefined;
+    try {
+      const host = await this.hostsService.get();
+      hostName = host.name;
+      hostLogoUrl = host.logoUrl;
+    } catch {
+      // host fetch failure must not block OTP sending
+    }
+
+    const html = buildOtpEmail(code, hostName, hostLogoUrl);
     await this.mailService.sendEmail(target, 'Your Verification Code', html);
   }
 

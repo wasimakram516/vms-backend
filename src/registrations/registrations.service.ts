@@ -19,8 +19,19 @@ import { RejectRegistrationDto } from './dto/reject-registration.dto.js';
 import { RegistrationsSocket } from '../socket/registrations.socket.js';
 import { MailService } from '../mail/mail.service.js';
 import { buildRegistrationStatusEmail } from '../mail/templates/approval.template.js';
+import {
+  buildHostNewRegistrationEmail,
+  buildHostApprovedEmail,
+  buildHostRejectedEmail,
+  buildHostCancelledEmail,
+  buildHostCheckInEmail,
+  buildHostCheckOutEmail,
+} from '../mail/templates/host-notification.template.js';
 import { generateNdaPdf } from '../mail/templates/nda.pdf.js';
 import { HostsService } from '../hosts/hosts.service.js';
+import { NdaTemplatesService } from '../nda-templates/nda-templates.service.js';
+import { UserNdaAcceptance } from '../nda-templates/entities/user-nda-acceptance.entity.js';
+import { uploadBufferToS3 } from '../common/s3.storage.js';
 import { nanoid } from 'nanoid';
 import * as QRCode from 'qrcode';
 
@@ -77,11 +88,14 @@ export class RegistrationsService {
     private readonly registrationRepo: Repository<Registration>,
     @InjectRepository(RegistrationFieldValue)
     private readonly fieldValueRepo: Repository<RegistrationFieldValue>,
+    @InjectRepository(UserNdaAcceptance)
+    private readonly ndaAcceptanceRepo: Repository<UserNdaAcceptance>,
     private readonly customFieldsService: CustomFieldsService,
     private readonly usersService: UsersService,
     private readonly registrationsSocket: RegistrationsSocket,
     private readonly mailService: MailService,
     private readonly hostsService: HostsService,
+    private readonly ndaTemplatesService: NdaTemplatesService,
   ) {}
 
   async getFormFields() {
@@ -107,6 +121,14 @@ export class RegistrationsService {
       })
       .getCount();
     return count > 0;
+  }
+
+  private async getHostSafe() {
+    try {
+      return await this.hostsService.get();
+    } catch {
+      return null;
+    }
   }
 
   async create(dto: CreateRegistrationDto) {
@@ -180,9 +202,26 @@ export class RegistrationsService {
       throw new BadRequestException(`Missing required fields: ${missingFields.join(', ')}`);
     }
 
+    // Create NDA acceptance record inline if visitor accepted
+    let ndaAcceptanceId: string | undefined;
+    if (dto.ndaAccepted) {
+      const activeTemplate = await this.ndaTemplatesService.findActive();
+      if (activeTemplate) {
+        const acceptance = this.ndaAcceptanceRepo.create({
+          userId,
+          ndaTemplateId: activeTemplate.id,
+          acceptedAt: new Date(),
+          createdById: userId,
+          updatedById: userId,
+        });
+        const saved = await this.ndaAcceptanceRepo.save(acceptance);
+        ndaAcceptanceId = saved.id;
+      }
+    }
+
     const registration = this.registrationRepo.create({
       userId,
-      ndaAcceptanceId: dto.ndaAcceptanceId,
+      ndaAcceptanceId,
       badgeTemplateId: dto.badgeTemplateId,
       qrTemplateId: dto.qrTemplateId,
       requestedDateFrom: dto.requestedDateFrom,
@@ -203,6 +242,7 @@ export class RegistrationsService {
       }
       const full = await this.findOne(saved.id);
       this.registrationsSocket.emitNewRegistration(full);
+      this.sendHostNewRegistrationEmail(full).catch(() => {});
       return full;
     } catch (e: unknown) {
       const err = e as { code?: string; detail?: string };
@@ -375,6 +415,7 @@ export class RegistrationsService {
     const approved = await this.findOne(id);
     this.registrationsSocket.emitRegistrationUpdated(approved);
     await this.sendStatusEmail(approved, reg, 'approved');
+    this.sendHostStatusEmail(approved, reg, 'approved').catch(() => {});
     return approved;
   }
 
@@ -394,6 +435,7 @@ export class RegistrationsService {
     const rejected = await this.findOne(id);
     this.registrationsSocket.emitRegistrationUpdated(rejected);
     await this.sendStatusEmail(rejected, reg, 'rejected');
+    this.sendHostStatusEmail(rejected, reg, 'rejected').catch(() => {});
     return rejected;
   }
 
@@ -409,6 +451,7 @@ export class RegistrationsService {
     const cancelled = await this.findOne(id);
     this.registrationsSocket.emitRegistrationUpdated(cancelled);
     await this.sendStatusEmail(cancelled, reg, 'cancelled');
+    this.sendHostStatusEmail(cancelled, reg, 'cancelled').catch(() => {});
     return cancelled;
   }
 
@@ -426,6 +469,8 @@ export class RegistrationsService {
         qrBuffer = await QRCode.toBuffer(reg.qrToken, { width: 300, margin: 2 });
       }
 
+      const host = await this.getHostSafe();
+
       const subjects: Record<typeof status, string> = {
         approved: 'Your Visit Has Been Approved',
         rejected: 'Your Visit Request Has Been Rejected',
@@ -435,6 +480,8 @@ export class RegistrationsService {
       const html = buildRegistrationStatusEmail({
         status,
         visitorName: result.user.fullName ?? 'Visitor',
+        hostName: host?.name,
+        hostLogoUrl: host?.logoUrl,
         approvedDateFrom: reg.approvedDateFrom,
         approvedDateTo: reg.approvedDateTo,
         approvedTimeFrom: reg.approvedTimeFrom,
@@ -452,6 +499,113 @@ export class RegistrationsService {
     } catch {
       // Email failure must not block the response
     }
+  }
+
+  private async sendHostNewRegistrationEmail(
+    result: Awaited<ReturnType<typeof this.findOne>>,
+  ): Promise<void> {
+    const host = await this.getHostSafe();
+    if (!host?.email) return;
+
+    const fields = this.extractFields(result);
+    const visitor = this.buildVisitorSummary(result, fields);
+
+    const reg = result;
+    const requestedDate = reg.requestedDateFrom
+      ? reg.requestedDateFrom === reg.requestedDateTo
+        ? reg.requestedDateFrom
+        : `${reg.requestedDateFrom} – ${reg.requestedDateTo}`
+      : '—';
+    const requestedTime = reg.requestedTimeFrom
+      ? `${reg.requestedTimeFrom} – ${reg.requestedTimeTo}`
+      : null;
+
+    const html = buildHostNewRegistrationEmail({
+      host: { name: host.name, logoUrl: host.logoUrl },
+      visitor,
+      requestedDate,
+      requestedTime,
+    });
+
+    await this.mailService.sendEmail(
+      host.email,
+      `New Visit Request — ${visitor.fullName}`,
+      html,
+    );
+  }
+
+  private async sendHostStatusEmail(
+    result: Awaited<ReturnType<typeof this.findOne>>,
+    reg: Registration,
+    status: 'approved' | 'rejected' | 'cancelled',
+  ): Promise<void> {
+    const host = await this.getHostSafe();
+    if (!host?.email) return;
+
+    const fields = this.extractFields(result);
+    const visitor = this.buildVisitorSummary(result, fields);
+
+    const dateRange = reg.approvedDateFrom
+      ? reg.approvedDateFrom === reg.approvedDateTo
+        ? reg.approvedDateFrom
+        : `${reg.approvedDateFrom} – ${reg.approvedDateTo}`
+      : null;
+    const timeRange = reg.approvedTimeFrom
+      ? `${reg.approvedTimeFrom} – ${reg.approvedTimeTo}`
+      : null;
+
+    let html: string;
+    let subject: string;
+
+    if (status === 'approved') {
+      html = buildHostApprovedEmail({
+        host: { name: host.name, logoUrl: host.logoUrl },
+        visitor,
+        approvedDate: dateRange ?? '—',
+        approvedTime: timeRange,
+      });
+      subject = `Visit Approved — ${visitor.fullName}`;
+    } else if (status === 'rejected') {
+      html = buildHostRejectedEmail({
+        host: { name: host.name, logoUrl: host.logoUrl },
+        visitor,
+        rejectionReason: reg.rejectionReason,
+      });
+      subject = `Visit Rejected — ${visitor.fullName}`;
+    } else {
+      html = buildHostCancelledEmail({
+        host: { name: host.name, logoUrl: host.logoUrl },
+        visitor,
+        approvedDate: dateRange,
+      });
+      subject = `Visit Cancelled — ${visitor.fullName}`;
+    }
+
+    await this.mailService.sendEmail(host.email, subject, html);
+  }
+
+  private extractFields(result: Awaited<ReturnType<typeof this.findOne>>): Record<string, unknown> {
+    const fields: Record<string, unknown> = {};
+    for (const fv of result.fieldValues ?? []) {
+      if (fv.customField?.fieldKey) {
+        fields[fv.customField.fieldKey] = fv.value;
+      }
+    }
+    return fields;
+  }
+
+  private buildVisitorSummary(
+    result: Awaited<ReturnType<typeof this.findOne>>,
+    fields: Record<string, unknown>,
+  ) {
+    return {
+      fullName: result.user?.fullName ?? 'Visitor',
+      organisation: pickOrganisation(fields),
+      idNumber: pickId(fields),
+      email: result.user?.email ?? pickEmail(fields),
+      phone: result.user?.phone ?? pickPhone(fields),
+      purpose: result.purposeOfVisit ?? undefined,
+    };
   }
 
   async verifyByToken(token: string) {
@@ -547,13 +701,7 @@ export class RegistrationsService {
       const host = await this.hostsService.get();
       if (!host.email) return;
 
-      const fields: Record<string, unknown> = {};
-      for (const fv of reg.fieldValues ?? []) {
-        if (fv.customField?.fieldKey) {
-          fields[fv.customField.fieldKey] = fv.value;
-        }
-      }
-
+      const regFields = this.extractFields(reg);
       const visitorName = reg.user?.fullName ?? 'Visitor';
 
       const dateFrom = reg.approvedDateFrom ?? '';
@@ -570,22 +718,54 @@ export class RegistrationsService {
         ? `${formatNdaTime(timeFrom)} – ${formatNdaTime(timeTo)}`
         : '—';
 
+      const ndaTemplate = await this.ndaTemplatesService.findActive();
+
       const pdfBuffer = await generateNdaPdf({
+        heading: ndaTemplate?.name ?? 'Non-Disclosure Agreement',
         hostName: host.name,
         visitorFullName: visitorName,
-        visitorOrganisation: pickOrganisation(fields) ?? '—',
-        visitorIdNumber: pickId(fields) ?? '—',
+        visitorOrganisation: pickOrganisation(regFields) ?? '—',
+        visitorIdNumber: pickId(regFields) ?? '—',
         dateOfVisit,
         visitTime,
         purpose: reg.purposeOfVisit ?? '—',
+        preamble: ndaTemplate?.preamble ?? '',
+        body: ndaTemplate?.body ?? '',
+        visitorRecordTitle: ndaTemplate?.visitorRecordTitle ?? undefined,
+        visitorRecordNote: ndaTemplate?.visitorRecordNote ?? undefined,
+        footer: ndaTemplate?.footer ?? undefined,
       });
 
-      const filename = `NDA — ${visitorName}.pdf`;
+      const filename = `NDA_${visitorName.replace(/\s+/g, '_')}_${Date.now()}.pdf`;
+
+      // Upload PDF to S3 and store URL on the acceptance record
+      try {
+        const { fileUrl } = await uploadBufferToS3(pdfBuffer, 'application/pdf', filename, { inline: false });
+        if (reg.ndaAcceptanceId) {
+          await this.ndaAcceptanceRepo.update(reg.ndaAcceptanceId, { ndaFormUrl: fileUrl });
+        }
+      } catch {
+        // S3 upload failure must not block email
+      }
+
+      const visitor = this.buildVisitorSummary(reg, regFields);
+      const checkInAt = reg.checkedInAt
+        ? reg.checkedInAt.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })
+        : new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+
+      const html = buildHostCheckInEmail({
+        host: { name: host.name, logoUrl: host.logoUrl },
+        visitor,
+        checkInTime: checkInAt,
+        approvedDate: dateOfVisit,
+        approvedTime: visitTime !== '—' ? visitTime : null,
+        ndaFilename: filename,
+      });
 
       await this.mailService.sendEmail(
         host.email,
-        `NDA — ${visitorName} Check-In`,
-        `<p>Please find attached the signed NDA for <strong>${visitorName}</strong> who checked in on ${reg.approvedDateFrom}.</p>`,
+        `Visitor Check-In — ${visitorName}`,
+        html,
         [{ filename, content: pdfBuffer, cid: 'nda@sinan' }],
       );
     } catch {
@@ -610,6 +790,47 @@ export class RegistrationsService {
     await this.registrationRepo.save(reg);
     const updated = await this.findOne(id);
     this.registrationsSocket.emitRegistrationUpdated(updated);
+    this.sendHostCheckOutEmail(updated, reg).catch(() => {});
     return updated;
+  }
+
+  private async sendHostCheckOutEmail(
+    result: Awaited<ReturnType<typeof this.findOne>>,
+    reg: Registration,
+  ): Promise<void> {
+    const host = await this.getHostSafe();
+    if (!host?.email) return;
+
+    const fields = this.extractFields(result);
+    const visitor = this.buildVisitorSummary(result, fields);
+
+    const fmt = (d: Date | null | undefined) =>
+      d ? d.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : null;
+
+    const checkInAt  = fmt(reg.checkedInAt);
+    const checkOutAt = fmt(result.checkedOutAt ?? new Date());
+
+    let duration: string | null = null;
+    if (reg.checkedInAt && result.checkedOutAt) {
+      const ms = result.checkedOutAt.getTime() - reg.checkedInAt.getTime();
+      const totalMinutes = Math.round(ms / 60000);
+      const hours   = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      duration = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+    }
+
+    const html = buildHostCheckOutEmail({
+      host: { name: host.name, logoUrl: host.logoUrl },
+      visitor,
+      checkInTime: checkInAt,
+      checkOutTime: checkOutAt ?? '—',
+      duration,
+    });
+
+    await this.mailService.sendEmail(
+      host.email,
+      `Visitor Checked Out — ${visitor.fullName}`,
+      html,
+    );
   }
 }

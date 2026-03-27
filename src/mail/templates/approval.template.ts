@@ -1,16 +1,18 @@
+import { buildBaseEmail } from './base.template.js';
+
 export type RegistrationEmailStatus = 'approved' | 'rejected' | 'cancelled';
 
-const STATUS_CONFIG: Record<RegistrationEmailStatus, { label: string; message: string }> = {
+const STATUS_CONFIG: Record<RegistrationEmailStatus, { title: string; message: string }> = {
   approved: {
-    label: 'Visit Approved',
-    message: 'Your visit request has been <strong>approved</strong>! Please present the QR code below at the entrance for check-in.',
+    title: 'Visit Approved',
+    message: 'Great news! Your visit request has been <strong>approved</strong>. Please present the QR code below at the entrance when you arrive.',
   },
   rejected: {
-    label: 'Visit Request Rejected',
+    title: 'Visit Request Rejected',
     message: 'Unfortunately, your visit request has been <strong>rejected</strong>.',
   },
   cancelled: {
-    label: 'Visit Cancelled',
+    title: 'Visit Cancelled',
     message: 'Your visit registration has been <strong>cancelled</strong>.',
   },
 };
@@ -18,6 +20,8 @@ const STATUS_CONFIG: Record<RegistrationEmailStatus, { label: string; message: s
 export function buildRegistrationStatusEmail(params: {
   status: RegistrationEmailStatus;
   visitorName: string;
+  hostName?: string;
+  hostLogoUrl?: string | null;
   // approved only
   approvedDateFrom?: string;
   approvedDateTo?: string;
@@ -31,6 +35,8 @@ export function buildRegistrationStatusEmail(params: {
   const {
     status,
     visitorName,
+    hostName = 'Visitor Management',
+    hostLogoUrl,
     approvedDateFrom,
     approvedDateTo,
     approvedTimeFrom,
@@ -57,82 +63,67 @@ export function buildRegistrationStatusEmail(params: {
   const qrSection =
     status === 'approved' && qrToken
       ? `
-        <p style="font-size:15px;color:#333;line-height:1.6;margin-top:24px;">
-          Please present this QR at check-in:
+        <p style="font-size:14px;color:#495057;margin-top:20px;">
+          Please present this QR code at the reception desk on arrival:
         </p>
-        <div style="text-align:center;margin:20px 0;">
-          <a href="#" style="cursor:default;display:inline-block;text-decoration:none;" tabindex="-1">
-            <img src="cid:qrcode@sinan" alt="Entry QR Code"
-              style="width:200px;height:200px;border:1px solid #eee;border-radius:8px;padding:8px;pointer-events:none;display:block;" />
-          </a>
+        <div style="text-align:center;margin:16px 0;">
+          <img src="cid:qrcode@sinan" alt="Entry QR Code"
+            style="width:180px;height:180px;border:1px solid #dee2e6;border-radius:8px;padding:8px;display:inline-block;" />
         </div>
-        <p style="font-size:15px;color:#333;line-height:1.6;text-align:center;">
-          Your Token: <strong>${qrToken}</strong>
+        <p style="font-size:13px;color:#6c757d;text-align:center;margin:0;">
+          Token: <strong style="color:#121922;">${qrToken}</strong>
         </p>`
       : '';
 
   const detailsSection =
     status === 'approved' && dateRange
       ? `
-        <h3 style="margin-top:24px;font-size:17px;color:#004aad;">Visit Details:</h3>
-        <table style="width:100%;font-size:14px;color:#333;">
-          <tr>
-            <td style="padding:4px 0;"><strong>Date:</strong></td>
-            <td style="padding:4px 0;">${dateRange}</td>
-          </tr>
-          ${timeRange ? `<tr>
-            <td style="padding:4px 0;"><strong>Time:</strong></td>
-            <td style="padding:4px 0;">${timeRange}</td>
-          </tr>` : ''}
-          ${purposeOfVisit ? `<tr>
-            <td style="padding:4px 0;"><strong>Purpose:</strong></td>
-            <td style="padding:4px 0;">${purposeOfVisit}</td>
-          </tr>` : ''}
+        <table style="width:100%;border-collapse:collapse;background:#f8f9fa;border-radius:8px;overflow:hidden;margin-top:20px;">
+          <tbody>
+            <tr>
+              <td style="padding:8px 12px;font-size:13px;color:#6c757d;width:120px;">Date</td>
+              <td style="padding:8px 12px;font-size:13px;color:#212529;font-weight:500;">${dateRange}</td>
+            </tr>
+            ${timeRange ? `<tr>
+              <td style="padding:8px 12px;font-size:13px;color:#6c757d;">Time</td>
+              <td style="padding:8px 12px;font-size:13px;color:#212529;font-weight:500;">${timeRange}</td>
+            </tr>` : ''}
+            ${purposeOfVisit ? `<tr>
+              <td style="padding:8px 12px;font-size:13px;color:#6c757d;">Purpose</td>
+              <td style="padding:8px 12px;font-size:13px;color:#212529;font-weight:500;">${purposeOfVisit}</td>
+            </tr>` : ''}
+          </tbody>
         </table>`
       : '';
 
   const rejectionSection =
     status === 'rejected' && rejectionReason
       ? `
-        <p style="font-size:14px;color:#555;margin-top:16px;">
+        <p style="font-size:13px;color:#6c757d;margin-top:16px;">
           <strong>Reason:</strong> ${rejectionReason}
         </p>`
       : '';
 
-  return `
-  <div style="font-family:'Segoe UI',Arial,sans-serif;background:#f6f8fa;padding:20px;">
-    <div style="max-width:640px;margin:auto;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.05);">
+  const content = `
+    <p style="font-size:15px;color:#343a40;margin:0 0 8px;">
+      Hi <strong>${visitorName}</strong>,
+    </p>
+    <p style="font-size:14px;color:#495057;line-height:1.6;margin:0;">
+      ${config.message}
+    </p>
+    ${detailsSection}
+    ${qrSection}
+    ${rejectionSection}
+    <hr style="border:none;border-top:1px solid #e9ecef;margin:20px 0;" />
+    <p style="font-size:13px;color:#6c757d;margin:0;">
+      If you have any questions, please contact the reception desk directly.
+    </p>`;
 
-      <!-- HEADER -->
-      <div style="background:#004aad;padding:24px;text-align:center;">
-        <h2 style="color:#fff;font-size:22px;margin:0;">${config.label}</h2>
-      </div>
-
-      <!-- CONTENT BODY -->
-      <div style="padding:24px 28px 28px;">
-
-        <p style="font-size:15px;color:#333;margin-top:28px;">
-          Hi <strong>${visitorName}</strong>,
-        </p>
-
-        <p style="font-size:15px;color:#333;line-height:1.6;">
-          ${config.message}
-        </p>
-
-        ${qrSection}
-        ${detailsSection}
-        ${rejectionSection}
-
-        <!-- FOOTER -->
-        <hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />
-        <p style="font-size:14px;color:#777;">
-          If you have any questions, please contact the reception.
-        </p>
-        <p style="font-size:14px;color:#777;">
-          See you soon!
-        </p>
-
-      </div>
-    </div>
-  </div>`;
+  return buildBaseEmail({
+    hostName,
+    hostLogoUrl,
+    title: config.title,
+    content,
+    footerNote: `You are receiving this email because you submitted a visit request to <strong>${hostName}</strong>.`,
+  });
 }
