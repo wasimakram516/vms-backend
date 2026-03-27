@@ -47,3 +47,6 @@ lerna-debug.log*
 *.swp
 *.swo
 *~
+
+# Local test outputs
+/outputs

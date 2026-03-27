@@ -1,13 +1,13 @@
-import { IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class CreateRegistrationDto {
   @IsString()
   @IsOptional()
   userId?: string;
 
-  @IsString()
+  @IsBoolean()
   @IsOptional()
-  ndaAcceptanceId?: string;
+  ndaAccepted?: boolean;
 
   @IsString()
   @IsOptional()

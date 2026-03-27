@@ -19,10 +19,22 @@ export class NdaTemplate {
   @Column()
   version: number;
 
-  @Column({ nullable: true })
-  fileUrl: string;
+  @Column({ type: 'text' })
+  preamble: string;
 
-  @Column({ default: true })
+  @Column({ type: 'text' })
+  body: string;
+
+  @Column({ type: 'varchar', nullable: true })
+  visitorRecordTitle: string;
+
+  @Column({ type: 'text', nullable: true })
+  visitorRecordNote: string;
+
+  @Column({ type: 'text', nullable: true })
+  footer: string;
+
+  @Column({ default: false })
   isActive: boolean;
 
   @ManyToOne(() => User, { nullable: true })

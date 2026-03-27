@@ -33,6 +33,9 @@ export class UserNdaAcceptance {
   signatureFileUrl: string;
 
   @Column({ nullable: true })
+  ndaFormUrl: string;
+
+  @Column({ nullable: true })
   ipAddress: string;
 
   @Column({ nullable: true })
