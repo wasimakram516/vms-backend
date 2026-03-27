@@ -1,5 +1,5 @@
 import { plainToInstance } from 'class-transformer';
-import { IsBoolean, IsEnum, IsNumber, IsString, Max, Min, validateSync } from 'class-validator';
+import { IsBoolean, IsEnum, IsNumber, IsString, IsUrl, Max, Min, validateSync } from 'class-validator';
 
 enum Environment {
   Development = 'development',
@@ -80,6 +80,21 @@ class EnvironmentVariables {
 
   @IsString()
   SMTP_FROM: string;
+
+  @IsString()
+  AWS_REGION: string;
+
+  @IsString()
+  AWS_ACCESS_KEY_ID: string;
+
+  @IsString()
+  AWS_SECRET_ACCESS_KEY: string;
+
+  @IsString()
+  S3_BUCKET: string;
+
+  @IsUrl({ require_tld: false })
+  CLOUDFRONT_URL: string;
 }
 
 export function validate(config: Record<string, unknown>) {

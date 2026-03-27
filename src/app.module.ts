@@ -17,6 +17,7 @@ import { AuditLogsModule } from './audit-logs/audit-logs.module.js';
 import { MailModule } from './mail/mail.module.js';
 import { SocketModule } from './socket/socket.module.js';
 import { HostsModule } from './hosts/hosts.module.js';
+import { UploadModule } from './upload/upload.module.js';
 
 @Module({
   controllers: [AppController],
@@ -59,6 +60,7 @@ import { HostsModule } from './hosts/hosts.module.js';
     OtpVerificationsModule,
     RegistrationActivityLogsModule,
     AuditLogsModule,
+    UploadModule,
   ],
 })
 export class AppModule {}

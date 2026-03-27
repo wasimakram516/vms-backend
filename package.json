@@ -21,9 +21,12 @@
     "db:create": "ts-node --project tsconfig.migrations.json -r tsconfig-paths/register src/database/create-database.ts",
     "migration:generate": "npm run db:create && ts-node --project tsconfig.migrations.json -r ./src/database/require-hook.js -r tsconfig-paths/register node_modules/typeorm/cli.js migration:generate -d src/database/data-source.ts",
     "migration:run": "npm run db:create && ts-node --project tsconfig.migrations.json -r ./src/database/require-hook.js -r tsconfig-paths/register node_modules/typeorm/cli.js migration:run -d src/database/data-source.ts",
-    "migration:revert": "ts-node --project tsconfig.migrations.json -r ./src/database/require-hook.js -r tsconfig-paths/register node_modules/typeorm/cli.js migration:revert -d src/database/data-source.ts"
+    "migration:revert": "ts-node --project tsconfig.migrations.json -r ./src/database/require-hook.js -r tsconfig-paths/register node_modules/typeorm/cli.js migration:revert -d src/database/data-source.ts",
+    "test:pdf": "ts-node --project tsconfig.migrations.json -r ./src/database/require-hook.js -r tsconfig-paths/register scripts/test-nda.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1018.0",
+    "@aws-sdk/s3-request-presigner": "^3.1018.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.3",
     "@nestjs/core": "^11.0.1",
@@ -40,6 +43,7 @@
     "cookie-parser": "^1.4.7",
     "helmet": "^8.1.0",
     "nanoid": "^5.1.7",
+    "node-html-parser": "^7.1.0",
     "nodemailer": "^8.0.4",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
@@ -63,6 +67,7 @@
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
+    "@types/multer": "^2.1.0",
     "@types/node": "^22.10.7",
     "@types/nodemailer": "^7.0.11",
     "@types/passport-jwt": "^4.0.1",
