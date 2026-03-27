@@ -49,6 +49,12 @@ export class NdaTemplatesController {
     return this.service.findActive();
   }
 
+  @ApiOperation({ summary: 'List all NDA forms (accepted + PDF generated)' })
+  @Get('acceptances/forms')
+  async findAllForms() {
+    return this.service.findAllForms();
+  }
+
   @ApiOperation({ summary: 'Get NDA template by ID' })
   @Get(':id')
   async findOne(@Param('id') id: string) {
@@ -77,11 +83,5 @@ export class NdaTemplatesController {
   @Delete(':id')
   async remove(@Param('id') id: string) {
     return this.service.remove(id);
-  }
-
-  @ApiOperation({ summary: 'List all NDA forms (accepted + PDF generated)' })
-  @Get('acceptances/forms')
-  async findAllForms() {
-    return this.service.findAllForms();
   }
 }
